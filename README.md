@@ -132,7 +132,7 @@
 ### 1. Clone the Repository
 
 ```bash
-git clone https://github.com/YOUR_USERNAME/guardian-ai.git
+git clone https://github.com/abdul05kh/guardian-ai.git
 cd guardian-ai
 ```
 
