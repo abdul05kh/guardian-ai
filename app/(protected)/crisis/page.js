@@ -2,11 +2,12 @@
 
 import { useState, useEffect } from 'react';
 import { classifyCrisis, generateCrisisActionPlan } from '@/lib/gemini';
+import { collection, query, onSnapshot } from 'firebase/firestore';
+import { db } from '@/lib/firebase';
+import { useToast } from '@/lib/toast-context';
 
-const SAMPLE_VENUES = [
+const SAMPLE_VENUES_FALLBACK = [
   { id: 1, name: 'Grand Hyatt Mumbai', type: 'hotel', capacity: 800, zones: ['Lobby', 'Pool', 'Restaurant', 'Ballroom', 'Parking'] },
-  { id: 2, name: 'Wankhede Stadium', type: 'stadium', capacity: 33000, zones: ['North Stand', 'South Stand', 'East Gallery', 'West Gallery', 'VIP Box'] },
-  { id: 3, name: 'BKC Convention Center', type: 'convention', capacity: 2000, zones: ['Hall A', 'Hall B', 'Foyer', 'Backstage', 'Loading Dock'] },
 ];
 
 const MOCK_RESPONDERS = [
@@ -26,7 +27,9 @@ const SEVERITY_COLORS = {
 };
 
 export default function CrisisPage() {
-  const [selectedVenue, setSelectedVenue] = useState(SAMPLE_VENUES[0]);
+  const { addToast } = useToast();
+  const [venues, setVenues] = useState([]);
+  const [selectedVenue, setSelectedVenue] = useState(null);
   const [crisisActive, setCrisisActive] = useState(false);
   const [crisisData, setCrisisData] = useState(null);
   const [actionPlan, setActionPlan] = useState(null);
@@ -36,7 +39,26 @@ export default function CrisisPage() {
   const [timeline, setTimeline] = useState([]);
   const [responders, setResponders] = useState(MOCK_RESPONDERS);
 
+  useEffect(() => {
+    const q = query(collection(db, 'venues'));
+    const unsubscribe = onSnapshot(q, (snapshot) => {
+      const fetched = snapshot.docs.map(doc => ({
+        id: doc.id,
+        zones: Array.from({length: doc.data().zones || 5}, (_, i) => `Zone ${String.fromCharCode(65+i)}`),
+        ...doc.data()
+      }));
+      setVenues(fetched.length ? fetched : SAMPLE_VENUES_FALLBACK);
+      if (!selectedVenue && fetched.length > 0) {
+        setSelectedVenue(fetched[0]);
+      } else if (!selectedVenue && fetched.length === 0) {
+        setSelectedVenue(SAMPLE_VENUES_FALLBACK[0]);
+      }
+    });
+    return () => unsubscribe();
+  }, [selectedVenue]);
+
   const triggerSOS = async () => {
+    if (!selectedVenue) return;
     if (!crisisDescription.trim()) {
       setCrisisDescription('Emergency situation detected in the venue');
     }
@@ -121,6 +143,7 @@ export default function CrisisPage() {
   };
 
   const resolveCrisis = () => {
+    addToast('Crisis resolved and logged to TrustLedger', 'success');
     setTimeline(prev => [...prev, {
       time: new Date().toLocaleTimeString(),
       event: '✅ Crisis resolved',
@@ -262,15 +285,19 @@ export default function CrisisPage() {
 
       {/* Venue Selection */}
       <div className="venue-select">
-        {SAMPLE_VENUES.map(v => (
-          <button
-            key={v.id}
-            className={`venue-chip ${selectedVenue.id === v.id ? 'active' : ''}`}
-            onClick={() => !crisisActive && setSelectedVenue(v)}
-          >
-            {v.type === 'hotel' ? '🏨' : v.type === 'stadium' ? '🏟️' : '🏢'} {v.name}
-          </button>
-        ))}
+        {!selectedVenue ? (
+            <div style={{ color: 'var(--text-muted)' }}>Loading venues...</div>
+        ) : (
+          venues.map(v => (
+            <button
+              key={v.id}
+              className={`venue-chip ${selectedVenue.id === v.id ? 'active' : ''}`}
+              onClick={() => !crisisActive && setSelectedVenue(v)}
+            >
+              {v.type === 'Hotel' ? '🏨' : v.type === 'Stadium' ? '🏟️' : '🏢'} {v.name}
+            </button>
+          ))
+        )}
       </div>
 
       {/* Crisis Banner */}

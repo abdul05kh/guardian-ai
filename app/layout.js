@@ -1,5 +1,6 @@
 import './globals.css';
 import { AuthProvider } from '@/lib/auth-context';
+import { ToastProvider } from '@/lib/toast-context';
 
 export const metadata = {
   title: 'Guardian AI — Digital Asset Protection & Crisis Response',
@@ -21,9 +22,11 @@ export default function RootLayout({ children }) {
         <meta name="theme-color" content="#050810" />
       </head>
       <body>
-        <AuthProvider>
-          {children}
-        </AuthProvider>
+        <ToastProvider>
+          <AuthProvider>
+            {children}
+          </AuthProvider>
+        </ToastProvider>
       </body>
     </html>
   );

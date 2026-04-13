@@ -1,20 +1,45 @@
 'use client';
 
-import { useState } from 'react';
-import { generateDMCANotice } from '@/lib/gemini';
-
-const SAMPLE_DETECTIONS = [
-  { id: 1, assetName: 'IPL 2026 Final Broadcast', platform: 'Telegram', url: 'https://t.me/piracy_channel_432/8291', confidence: 96.2, method: 'perceptual_hash', detectedAt: '2026-04-11T18:40:00Z', status: 'pending_review', revenueAtRisk: 125000 },
-  { id: 2, assetName: 'Match Highlights Reel', platform: 'YouTube', url: 'https://youtube.com/watch?v=x7f2a3d9', confidence: 91.8, method: 'vertex_vision', detectedAt: '2026-04-11T18:35:00Z', status: 'confirmed', revenueAtRisk: 45000 },
-  { id: 3, assetName: 'Brand Logo Package v3', platform: 'X/Twitter', url: 'https://x.com/user/status/1234567890', confidence: 88.4, method: 'perceptual_hash', detectedAt: '2026-04-11T18:30:00Z', status: 'confirmed', revenueAtRisk: 8000 },
-  { id: 4, assetName: 'Stadium Anthem - Official Audio', platform: 'TikTok', url: 'https://tiktok.com/@user/video/123', confidence: 82.1, method: 'audio_fingerprint', detectedAt: '2026-04-11T18:22:00Z', status: 'pending_review', revenueAtRisk: 12000 },
-  { id: 5, assetName: 'IPL 2026 Final Broadcast', platform: 'Dailymotion', url: 'https://dailymotion.com/video/x8df2a1', confidence: 94.7, method: 'vertex_vision', detectedAt: '2026-04-11T18:18:00Z', status: 'false_positive', revenueAtRisk: 0 },
-];
+import { useState, useEffect } from 'react';
+import { generateDMCANotice, scanExternalUrl } from '@/lib/gemini';
+import { collection, query, orderBy, onSnapshot, doc, updateDoc, addDoc } from 'firebase/firestore';
+import { db } from '@/lib/firebase';
+import { generateHash } from '@/lib/crypto';
+import { useAuth } from '@/lib/auth-context';
+import { useToast } from '@/lib/toast-context';
 
 export default function DetectionsPage() {
-  const [detections, setDetections] = useState(SAMPLE_DETECTIONS);
+  const { userProfile } = useAuth();
+  const { addToast } = useToast();
+  const [detections, setDetections] = useState([]);
+  const [loading, setLoading] = useState(true);
   const [generatingDMCA, setGeneratingDMCA] = useState(null);
   const [dmcaNotice, setDmcaNotice] = useState(null);
+  
+  const [showScanner, setShowScanner] = useState(false);
+  const [scanUrl, setScanUrl] = useState('');
+  const [isScanning, setIsScanning] = useState(false);
+
+  useEffect(() => {
+    const q = query(
+      collection(db, 'infringement_detections'),
+      orderBy('detectedAt', 'desc')
+    );
+
+    const unsubscribe = onSnapshot(q, (snapshot) => {
+      const dets = snapshot.docs.map(doc => ({
+        id: doc.id,
+        ...doc.data()
+      }));
+      setDetections(dets);
+      setLoading(false);
+    }, (error) => {
+      console.error("Error fetching detections: ", error);
+      setLoading(false);
+    });
+
+    return () => unsubscribe();
+  }, []);
 
   const handleGenerateDMCA = async (detection) => {
     setGeneratingDMCA(detection.id);
@@ -35,8 +60,58 @@ export default function DetectionsPage() {
     dmca_sent: { badge: 'badge-success', label: 'DMCA Sent' },
   };
 
+  const handleScan = async () => {
+    if (!scanUrl.trim()) return;
+    setIsScanning(true);
+    addToast('Scanning target URL using WebScanner...', 'info');
+    
+    try {
+      const response = await scanExternalUrl(scanUrl);
+      const res = typeof response === 'string' ? JSON.parse(response) : response;
+      
+      if (res.infringementFound) {
+        await addDoc(collection(db, 'infringement_detections'), {
+          assetName: res.assetName || 'Unknown Material',
+          url: scanUrl,
+          platform: res.platform || 'General Web',
+          method: res.method || 'Unknown',
+          confidence: res.confidence || 85,
+          revenueAtRisk: res.revenueAtRisk || 0,
+          status: 'pending_review',
+          detectedAt: new Date().toISOString(),
+          orgId: userProfile?.orgId || null
+        });
+        
+        await addDoc(collection(db, 'audit_log'), {
+           actionType: 'SCAN_INITIATED',
+           entityType: 'url',
+           entityId: scanUrl,
+           user: userProfile?.email || 'unknown',
+           payloadHash: await generateHash(`SCAN${scanUrl}${new Date().toISOString()}`),
+           loggedAt: new Date().toISOString(),
+           verified: true
+        });
+
+        addToast(`Infringement detected with ${res.confidence}% confidence`, 'warning');
+      } else {
+        addToast('No infringement detected on the target URL', 'success');
+      }
+      setShowScanner(false);
+      setScanUrl('');
+    } catch (error) {
+      console.error(error);
+      addToast('Failed to scan URL', 'error');
+    }
+    setIsScanning(false);
+  };
+
   return (
     <div className="page-content">
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px' }}>
+        <h2 style={{ fontFamily: 'var(--font-heading)', fontSize: '24px' }}>Detections</h2>
+        <button className="btn btn-primary" onClick={() => setShowScanner(true)}>🔍 Web Scanner</button>
+      </div>
+      
       <div style={{ display: 'flex', gap: '12px', marginBottom: '20px', flexWrap: 'wrap' }}>
         <div style={{ padding: '10px 18px', background: 'rgba(239, 68, 68, 0.06)', border: '1px solid rgba(239, 68, 68, 0.2)', borderRadius: 'var(--radius-md)', display: 'flex', alignItems: 'center', gap: '8px' }}>
           <span style={{ fontFamily: 'var(--font-heading)', fontSize: '20px', fontWeight: 700, color: 'var(--danger-glow)' }}>{detections.filter(d => d.status === 'confirmed').length}</span>
@@ -129,11 +204,68 @@ export default function DetectionsPage() {
             </div>
             <div className="modal-footer">
               <button className="btn btn-ghost" onClick={() => setDmcaNotice(null)}>Cancel</button>
-              <button className="btn btn-danger" onClick={() => {
-                setDetections(prev => prev.map(d => d.id === dmcaNotice.detection.id ? { ...d, status: 'dmca_sent' } : d));
-                setDmcaNotice(null);
-              }}>
+              <button className="btn btn-danger" onClick={async () => {
+                try {
+                  const detId = dmcaNotice.detection.id;
+                  await updateDoc(doc(db, 'infringement_detections', detId), {
+                    status: 'dmca_sent',
+                    dmcaSentAt: new Date().toISOString()
+                  });
+                  
+                  const payloadString = 'DMCA_ISSUED' + detId + new Date().toISOString();
+                  const hash = await generateHash(payloadString);
+                  
+                  await addDoc(collection(db, 'audit_log'), {
+                    actionType: 'DMCA_ISSUED',
+                    entityType: 'dmca_notice',
+                    entityId: detId,
+                    user: userProfile?.email || 'unknown',
+                    payloadHash: hash,
+                    loggedAt: new Date().toISOString(),
+                    verified: true
+                  });
+                  
+                  addToast(`DMCA Notice dispatched for ${dmcaNotice.detection.assetName}`, 'success');
+                  setDmcaNotice(null);
+                } catch (error) {
+                  console.error("Failed to update status", error);
+                  addToast("Failed to dispatch DMCA", 'error');
+                }
+              }} disabled={loading}>
                 📤 Send DMCA Notice
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+      {/* Scanner Modal */}
+      {showScanner && (
+        <div className="modal-overlay" onClick={() => !isScanning && setShowScanner(false)}>
+          <div className="modal" onClick={e => e.stopPropagation()}>
+            <div className="modal-header">
+              <h3 className="modal-title">🔍 Scanner / Request Analysis</h3>
+              <button className="modal-close" onClick={() => !isScanning && setShowScanner(false)} disabled={isScanning}>×</button>
+            </div>
+            <div className="modal-body">
+              <div className="form-group">
+                <label className="form-label">Target URL</label>
+                <input 
+                  type="text" 
+                  className="form-input" 
+                  placeholder="https://example.com/stream" 
+                  value={scanUrl}
+                  onChange={e => setScanUrl(e.target.value)}
+                  disabled={isScanning}
+                />
+              </div>
+              <p style={{ fontSize: '13px', color: 'var(--text-muted)', marginTop: '8px' }}>
+                The WebScanner AI module will analyze the target for potential infringement of active org assets.
+              </p>
+            </div>
+            <div className="modal-footer">
+              <button className="btn btn-ghost" onClick={() => setShowScanner(false)} disabled={isScanning}>Cancel</button>
+              <button className="btn btn-primary" onClick={handleScan} disabled={isScanning || !scanUrl.trim()}>
+                {isScanning ? 'Scanning...' : 'Scan URL'}
               </button>
             </div>
           </div>

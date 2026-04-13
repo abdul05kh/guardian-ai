@@ -1,9 +1,59 @@
 'use client';
 
+import { useState, useEffect } from 'react';
 import { useAuth } from '@/lib/auth-context';
 
 export default function SettingsPage() {
-  const { user, userProfile } = useAuth();
+  const { user, userProfile, updateUserProfile } = useAuth();
+  
+  const [profileData, setProfileData] = useState({
+    displayName: '',
+    role: 'Admin'
+  });
+  
+  const [configData, setConfigData] = useState({
+    geminiApiKey: '',
+    organizationName: '',
+    scanFrequency: 'Daily'
+  });
+  
+  const [savingProfile, setSavingProfile] = useState(false);
+  const [savingConfig, setSavingConfig] = useState(false);
+
+  useEffect(() => {
+    if (userProfile) {
+      setProfileData({
+        displayName: userProfile.displayName || '',
+        role: userProfile.role || 'Admin'
+      });
+      setConfigData({
+        geminiApiKey: userProfile.geminiApiKey || '',
+        organizationName: userProfile.organizationName || '',
+        scanFrequency: userProfile.scanFrequency || 'Daily'
+      });
+    } else if (user) {
+      setProfileData(prev => ({ ...prev, displayName: user.displayName || '' }));
+    }
+  }, [userProfile, user]);
+
+  const handleSaveProfile = async () => {
+    setSavingProfile(true);
+    await updateUserProfile({
+      displayName: profileData.displayName,
+      role: profileData.role
+    });
+    setSavingProfile(false);
+  };
+
+  const handleSaveConfig = async () => {
+    setSavingConfig(true);
+    await updateUserProfile({
+      geminiApiKey: configData.geminiApiKey,
+      organizationName: configData.organizationName,
+      scanFrequency: configData.scanFrequency
+    });
+    setSavingConfig(false);
+  };
 
   return (
     <div className="page-content">
@@ -14,7 +64,7 @@ export default function SettingsPage() {
             <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
               <div className="input-group">
                 <label className="input-label">Display Name</label>
-                <input className="input" defaultValue={user?.displayName || ''} />
+                <input className="input" value={profileData.displayName} onChange={e => setProfileData({...profileData, displayName: e.target.value})} />
               </div>
               <div className="input-group">
                 <label className="input-label">Email</label>
@@ -22,14 +72,16 @@ export default function SettingsPage() {
               </div>
               <div className="input-group">
                 <label className="input-label">Role</label>
-                <select className="input">
-                  <option>Admin</option>
-                  <option>Asset Manager</option>
-                  <option>Crisis Coordinator</option>
-                  <option>Viewer</option>
+                <select className="input" value={profileData.role} onChange={e => setProfileData({...profileData, role: e.target.value})}>
+                  <option value="admin">Admin</option>
+                  <option value="asset_manager">Asset Manager</option>
+                  <option value="crisis_coordinator">Crisis Coordinator</option>
+                  <option value="viewer">Viewer</option>
                 </select>
               </div>
-              <button className="btn btn-primary">Save Changes</button>
+              <button className="btn btn-primary" onClick={handleSaveProfile} disabled={savingProfile}>
+                {savingProfile ? 'Saving...' : 'Save Changes'}
+              </button>
             </div>
           </div>
         </div>
@@ -40,23 +92,25 @@ export default function SettingsPage() {
             <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
               <div className="input-group">
                 <label className="input-label">Gemini API Key</label>
-                <input className="input" type="password" placeholder="Enter your Gemini API key" />
+                <input className="input" type="password" placeholder="Enter your Gemini API key" value={configData.geminiApiKey} onChange={e => setConfigData({...configData, geminiApiKey: e.target.value})} />
                 <span style={{ fontSize: '11px', color: 'var(--text-muted)' }}>Get your key from aistudio.google.com</span>
               </div>
               <div className="input-group">
                 <label className="input-label">Organization Name</label>
-                <input className="input" placeholder="Your organization name" />
+                <input className="input" placeholder="Your organization name" value={configData.organizationName} onChange={e => setConfigData({...configData, organizationName: e.target.value})} />
               </div>
               <div className="input-group">
                 <label className="input-label">Scan Frequency</label>
-                <select className="input">
-                  <option>Every 30 minutes</option>
-                  <option>Every hour</option>
-                  <option>Every 6 hours</option>
-                  <option>Daily</option>
+                <select className="input" value={configData.scanFrequency} onChange={e => setConfigData({...configData, scanFrequency: e.target.value})}>
+                  <option value="Every 30 minutes">Every 30 minutes</option>
+                  <option value="Every hour">Every hour</option>
+                  <option value="Every 6 hours">Every 6 hours</option>
+                  <option value="Daily">Daily</option>
                 </select>
               </div>
-              <button className="btn btn-primary">Save Configuration</button>
+              <button className="btn btn-primary" onClick={handleSaveConfig} disabled={savingConfig}>
+                {savingConfig ? 'Saving...' : 'Save Configuration'}
+              </button>
             </div>
           </div>
         </div>

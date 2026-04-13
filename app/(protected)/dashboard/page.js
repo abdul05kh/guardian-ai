@@ -4,6 +4,24 @@ import { useState, useEffect, useMemo } from 'react';
 import { useAuth } from '@/lib/auth-context';
 import { db } from '@/lib/firebase';
 import { collection, query, orderBy, limit, onSnapshot, where } from 'firebase/firestore';
+import {
+  Chart as ChartJS,
+  CategoryScale,
+  LinearScale,
+  PointElement,
+  LineElement,
+  BarElement,
+  Title,
+  Tooltip,
+  Legend,
+  Filler,
+} from 'chart.js';
+import { Line } from 'react-chartjs-2';
+import dynamic from 'next/dynamic';
+
+const DashboardMap = dynamic(() => import('@/app/components/Map'), { ssr: false });
+
+ChartJS.register(CategoryScale, LinearScale, PointElement, LineElement, BarElement, Title, Tooltip, Legend, Filler);
 
 // Simulated real-time data for dashboard
 const generateKPIData = () => ({
@@ -16,53 +34,68 @@ const generateKPIData = () => ({
 });
 
 const PLATFORMS = ['YouTube', 'Telegram', 'X/Twitter', 'Dailymotion', 'TikTok', 'Dark Web', 'Torrent Sites'];
-const EVENT_TYPES = [
-  { type: 'detection', icon: '🔍', color: 'var(--danger)' },
-  { type: 'dmca_sent', icon: '⚖️', color: 'var(--warning)' },
-  { type: 'asset_added', icon: '🛡️', color: 'var(--success)' },
-  { type: 'crisis_alert', icon: '🚨', color: 'var(--danger)' },
-  { type: 'scan_complete', icon: '✅', color: 'var(--success)' },
-];
-
-function generateEvent() {
-  const evt = EVENT_TYPES[Math.floor(Math.random() * EVENT_TYPES.length)];
-  const platform = PLATFORMS[Math.floor(Math.random() * PLATFORMS.length)];
-  const messages = {
-    detection: `Infringement detected on ${platform} — Confidence: ${(75 + Math.random() * 25).toFixed(1)}%`,
-    dmca_sent: `DMCA notice dispatched to ${platform} — Awaiting response`,
-    asset_added: `New asset fingerprinted and registered — Hash generated`,
-    crisis_alert: `Security alert triggered — Zone ${String.fromCharCode(65 + Math.floor(Math.random() * 5))}`,
-    scan_complete: `Crawl scan completed — ${Math.floor(100 + Math.random() * 400)} URLs analyzed`,
-  };
-  return {
-    id: Date.now() + Math.random(),
-    ...evt,
-    message: messages[evt.type],
-    time: new Date().toLocaleTimeString(),
-  };
-}
+const EVENT_TYPES = {
+  ASSET_UPLOADED: { icon: '📤', color: 'var(--success)', type: 'asset_added' },
+  SCAN_INITIATED: { icon: '🔍', color: 'var(--cyan-primary)', type: 'scan_complete' },
+  INFRINGEMENT_DETECTED: { icon: '⚠️', color: 'var(--danger)', type: 'detection' },
+  DMCA_ISSUED: { icon: '⚖️', color: 'var(--warning)', type: 'dmca_sent' },
+  CRISIS_TRIGGERED: { icon: '🚨', color: 'var(--danger)', type: 'crisis_alert' },
+  CRISIS_RESOLVED: { icon: '✅', color: 'var(--success)', type: 'scan_complete' },
+  USER_ROLE_CHANGED: { icon: '👤', color: 'var(--purple-primary)', type: 'asset_added' },
+  ASSET_FINGERPRINTED: { icon: '🔐', color: 'var(--success)', type: 'scan_complete' },
+};
 
 export default function DashboardPage() {
   const { user } = useAuth();
-  const [kpis] = useState(generateKPIData);
   const [events, setEvents] = useState([]);
   const [chartLoaded, setChartLoaded] = useState(false);
+  const kpis = useMemo(() => generateKPIData(), []);
+  
+  // Real KPIs state
+  const [assetsCount, setAssetsCount] = useState(0);
+  const [violationsCount, setViolationsCount] = useState(0);
+  const [activeCrises, setActiveCrises] = useState(0);
+  const [dmcaSent, setDmcaSent] = useState(0);
+  const [chartData, setChartData] = useState([]);
 
-  // Simulate real-time event feed
-  useEffect(() => {
-    const initial = Array.from({ length: 8 }, generateEvent);
-    setEvents(initial);
-
-    const interval = setInterval(() => {
-      setEvents(prev => [generateEvent(), ...prev.slice(0, 19)]);
-    }, 4000 + Math.random() * 3000);
-
-    return () => clearInterval(interval);
-  }, []);
-
-  // Load chart.js dynamically (client-side only)
   useEffect(() => {
     setChartLoaded(true);
+    
+    // Simulate generic time-series data for the analytical chart
+    const days = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
+    setChartData(days.map(day => Math.floor(Math.random() * 50) + 10));
+    
+    // Listen to live events (audit log)
+    const auditQuery = query(collection(db, 'audit_log'), orderBy('loggedAt', 'desc'), limit(15));
+    const unsubscribeAudit = onSnapshot(auditQuery, (snapshot) => {
+      const logs = snapshot.docs.map(doc => {
+        const data = doc.data();
+        const eventMeta = EVENT_TYPES[data.actionType] || { icon: '📝', color: 'var(--blue-primary)', type: 'info' };
+        return {
+          id: doc.id,
+          ...data,
+          time: new Date(data.loggedAt).toLocaleTimeString(),
+          icon: eventMeta.icon,
+          color: eventMeta.color,
+          message: `${data.actionType.replace(/_/g, ' ')}: ${data.entityType} ${data.entityId.substring(0, 8)}`,
+        };
+      });
+      setEvents(logs);
+    });
+
+    // Listen to KPIs
+    const assetsUnsub = onSnapshot(collection(db, 'digital_assets'), (snap) => setAssetsCount(snap.size));
+    const detUnsub = onSnapshot(collection(db, 'infringement_detections'), (snap) => setViolationsCount(snap.size));
+    const dmcaUnsub = onSnapshot(query(collection(db, 'infringement_detections'), where('status', '==', 'dmca_sent')), (snap) => setDmcaSent(snap.size));
+    const crisisUnsub = onSnapshot(query(collection(db, 'crisis_events'), where('status', '==', 'active')), (snap) => setActiveCrises(snap.size));
+
+    return () => {
+      unsubscribeAudit();
+      assetsUnsub();
+      detUnsub();
+      dmcaUnsub();
+      crisisUnsub();
+    };
   }, []);
 
   return (
@@ -201,20 +234,20 @@ export default function DashboardPage() {
             <span className="kpi-label">Assets Protected</span>
             <div className="kpi-icon blue">🛡️</div>
           </div>
-          <div className="kpi-value kpi-value-animated">{kpis.assetsProtected.value.toLocaleString()}</div>
-          <div className={`kpi-change ${kpis.assetsProtected.positive ? 'positive' : 'negative'}`}>
-            {kpis.assetsProtected.positive ? '↑' : '↓'} {kpis.assetsProtected.change} this week
+          <div className="kpi-value kpi-value-animated">{assetsCount.toLocaleString()}</div>
+          <div className={`kpi-change positive`}>
+            Live from Firestore
           </div>
         </div>
 
         <div className="kpi-card danger">
           <div className="kpi-header">
-            <span className="kpi-label">Violations Today</span>
+            <span className="kpi-label">Detected Violations</span>
             <div className="kpi-icon danger">🔍</div>
           </div>
-          <div className="kpi-value kpi-value-animated" style={{ color: 'var(--danger-glow)' }}>{kpis.violationsToday.value}</div>
+          <div className="kpi-value kpi-value-animated" style={{ color: 'var(--danger-glow)' }}>{violationsCount}</div>
           <div className="kpi-change negative">
-            ↑ {kpis.violationsToday.change} from yesterday
+            Live from Firestore
           </div>
         </div>
 
@@ -223,11 +256,11 @@ export default function DashboardPage() {
             <span className="kpi-label">Active Crises</span>
             <div className="kpi-icon warning">🚨</div>
           </div>
-          <div className="kpi-value kpi-value-animated" style={{ color: kpis.activeCrises.value > 0 ? 'var(--warning-glow)' : 'var(--success-glow)' }}>
-            {kpis.activeCrises.value}
+          <div className="kpi-value kpi-value-animated" style={{ color: activeCrises > 0 ? 'var(--warning-glow)' : 'var(--success-glow)' }}>
+            {activeCrises}
           </div>
           <div className="kpi-change positive">
-            ↓ {kpis.activeCrises.change} resolved
+            Live from Firestore
           </div>
         </div>
 
@@ -236,9 +269,9 @@ export default function DashboardPage() {
             <span className="kpi-label">DMCA Notices Sent</span>
             <div className="kpi-icon success">⚖️</div>
           </div>
-          <div className="kpi-value kpi-value-animated">{kpis.dmcaSent.value}</div>
+          <div className="kpi-value kpi-value-animated">{dmcaSent}</div>
           <div className="kpi-change positive">
-            ↑ {kpis.dmcaSent.change} this month
+            Live from Firestore
           </div>
         </div>
       </div>
@@ -279,6 +312,50 @@ export default function DashboardPage() {
         </div>
       </div>
 
+      {/* Analytics Chart */}
+      <div className="card" style={{ marginBottom: '20px' }}>
+        <div className="card-header">
+          <h3 className="card-title">📈 Detections Over Time</h3>
+        </div>
+        <div className="card-body" style={{ height: '300px', padding: '20px' }}>
+          {chartLoaded && chartData.length > 0 ? (
+            <Line 
+              data={{
+                labels: ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'],
+                datasets: [
+                  {
+                    label: 'Violations Detected',
+                    data: chartData,
+                    borderColor: 'rgba(239, 68, 68, 1)',
+                    backgroundColor: 'rgba(239, 68, 68, 0.1)',
+                    borderWidth: 2,
+                    fill: 'start',
+                    tension: 0.4,
+                    pointBackgroundColor: 'rgba(239, 68, 68, 1)',
+                  }
+                ]
+              }}
+              options={{
+                responsive: true,
+                maintainAspectRatio: false,
+                plugins: {
+                  legend: { display: false },
+                  tooltip: { mode: 'index', intersect: false }
+                },
+                scales: {
+                  y: { beginAtZero: true, grid: { color: 'rgba(255, 255, 255, 0.05)' }, ticks: { color: 'rgba(255,255,255,0.5)' } },
+                  x: { grid: { display: false }, ticks: { color: 'rgba(255,255,255,0.5)' } }
+                }
+              }}
+            />
+          ) : (
+             <div style={{ height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--text-muted)' }}>
+               Loading Analytics...
+             </div>
+          )}
+        </div>
+      </div>
+
       {/* Main Content — Map + Feed + Platform Stats */}
       <div className="content-grid cols-2-1" style={{ marginBottom: '20px' }}>
         {/* Violation Map */}
@@ -290,25 +367,9 @@ export default function DashboardPage() {
               <span className="badge badge-warning">● 8 Pending</span>
             </div>
           </div>
-          <div className="card-body">
-            <div className="map-placeholder">
-              <div className="map-dots" style={{ top: '35%', left: '25%' }}>
-                <div className="map-dot"></div>
-              </div>
-              <div className="map-dots" style={{ top: '45%', left: '55%' }}>
-                <div className="map-dot"></div>
-                <div className="map-dot"></div>
-              </div>
-              <div className="map-dots" style={{ top: '30%', left: '70%' }}>
-                <div className="map-dot"></div>
-              </div>
-              <div className="map-dots" style={{ top: '55%', left: '42%' }}>
-                <div className="map-dot"></div>
-              </div>
-              <span style={{ position: 'relative', zIndex: 1, fontSize: 48, opacity: 0.3 }}>🗺️</span>
-              <span style={{ position: 'relative', zIndex: 1, fontSize: 13, color: 'var(--text-muted)' }}>
-                Real-time infringement detection map
-              </span>
+          <div className="card-body" style={{ padding: 0 }}>
+            <div className="map-placeholder" style={{ height: '350px', background: 'transparent' }}>
+              <DashboardMap />
             </div>
           </div>
         </div>
