@@ -56,6 +56,10 @@
 - **Compliance Badges** — GDPR, SOC2, DPDP, ISO 27001 compliance tracking
 - **CSV Export** — Full audit log export for regulatory submissions
 
+### 🏢 Enterprise Suite
+- **Autonomous Zero-Touch Enforcement** — Rule-based interceptor logically evaluates threats and dispatches DMCAs autonomously when risk thresholds are met.
+- **Predictive Threat Forecasting** — Geospatial pre-crime mapping projecting anomalies based on historical AI swarm generation paths.
+
 ### 📊 Intelligence Dashboard
 - **Real-Time KPIs** — Assets protected, violations detected, active crises, DMCA success rates
 - **Live Event Feed** — Auto-updating stream of platform events (detections, scans, alerts)
@@ -256,6 +260,15 @@ Immutable cryptographic audit trail. Every platform action is logged with SHA-25
 
 ### Detections (`/detections`)
 Infringement tracking table with confidence scores, detection methods (perceptual hash, Vertex Vision, audio fingerprint), revenue-at-risk calculations, and one-click DMCA notice generation via Gemini AI.
+
+### Threat Network (`/threat-network`)
+Deep Research Intelligence module utilizing an autonomous multi-agent swarm to construct ForceGraph projections of piracy clusters and generate Fiedler eigenvalue threat scores. 
+
+### Predictive Forecast (`/forecast`)
+Geospatial Threat Mapping dashboard visualizing pre-crime vulnerability indexes and predicting incoming digital asset infringement vectors prior to exploitation utilizing SVG map rendering.
+
+### Enforcement Policies (`/policies`)
+Enterprise rule-set configuration allowing admins to set minimum confidence and revenue loss thresholds that automatically circumvent human evaluation queues and trigger real-time zero-touch autonomous DMCA notifications.
 
 ### Settings (`/settings`)
 Platform configuration: user profile editing, Gemini API key management, scan frequency settings, and Google Cloud service integration status monitoring.
