@@ -70,29 +70,87 @@ export default function DetectionsPage() {
       const res = typeof response === 'string' ? JSON.parse(response) : response;
       
       if (res.infringementFound) {
-        await addDoc(collection(db, 'infringement_detections'), {
-          assetName: res.assetName || 'Unknown Material',
-          url: scanUrl,
-          platform: res.platform || 'General Web',
-          method: res.method || 'Unknown',
-          confidence: res.confidence || 85,
-          revenueAtRisk: res.revenueAtRisk || 0,
-          status: 'pending_review',
-          detectedAt: new Date().toISOString(),
-          orgId: userProfile?.orgId || null
-        });
-        
-        await addDoc(collection(db, 'audit_log'), {
-           actionType: 'SCAN_INITIATED',
-           entityType: 'url',
-           entityId: scanUrl,
-           user: userProfile?.email || 'unknown',
-           payloadHash: await generateHash(`SCAN${scanUrl}${new Date().toISOString()}`),
-           loggedAt: new Date().toISOString(),
-           verified: true
-        });
+        // [ENTERPRISE MODULE]: Zero-Touch Enforcement Policy Evaluation
+        let autoEnforced = false;
+        try {
+          // Look up active autonomous rules
+          const { getDocs } = await import('firebase/firestore');
+          const policiesSnapshot = await getDocs(collection(db, 'enforcement_policies'));
+          
+          for (const p of policiesSnapshot.docs) {
+            const policy = p.data();
+            const platformMatches = policy.targetPlatform === 'Any' || policy.targetPlatform === res.platform;
+            const thresholdMet = (res.confidence || 0) >= policy.confidenceThreshold;
+            
+            if (policy.status === 'ACTIVE' && platformMatches && thresholdMet) {
+              // Trigger Autonomous Sandbox Strike
+              addToast(`⚡ Zero-Touch Policy invoked: Auto-dispatching DMCA to ${res.platform}`, 'warning');
+              
+              // 1. Generate Notice Autonomously
+              const autoNoticeText = await generateDMCANotice(res.assetName || 'Target Asset', scanUrl, res.platform, userProfile?.orgId || 'Guardian AI Org');
+              
+              // 2. Log Detection as Automatically Mitigated
+              const detectionRef = await addDoc(collection(db, 'infringement_detections'), {
+                assetName: res.assetName || 'Unknown Material',
+                url: scanUrl,
+                platform: res.platform || 'General Web',
+                method: res.method || 'Unknown',
+                confidence: res.confidence || 85,
+                revenueAtRisk: res.revenueAtRisk || 0,
+                status: 'dmca_sent', // Bypasses pending review completely
+                detectedAt: new Date().toISOString(),
+                dmcaSentAt: new Date().toISOString(),
+                autoEnforcedRuleId: p.id,
+                orgId: userProfile?.orgId || null
+              });
 
-        addToast(`Infringement detected with ${res.confidence}% confidence`, 'warning');
+              // 3. Drop to TrustLedger Cryptographically
+              await addDoc(collection(db, 'audit_log'), {
+                 actionType: 'AUTO_DMCA_DISPATCHED',
+                 entityType: 'dmca_notice',
+                 entityId: detectionRef.id,
+                 user: 'SYSTEM_ZERO_TOUCH',
+                 payloadHash: await generateHash(`AUTO_DMCA${detectionRef.id}${new Date().toISOString()}`),
+                 loggedAt: new Date().toISOString(),
+                 verified: true,
+                 ruleApplied: p.id
+              });
+              
+              addToast('Autonomous DMCA Strike strictly logged to TrustLedger', 'success');
+              autoEnforced = true;
+              break; // Execute exactly one policy match
+            }
+          }
+        } catch(e) {
+          console.error("Auto-Enforcement Interceptor Failed:", e);
+        }
+
+        // Standard intake if no autonomous rule was met
+        if (!autoEnforced) {
+          await addDoc(collection(db, 'infringement_detections'), {
+            assetName: res.assetName || 'Unknown Material',
+            url: scanUrl,
+            platform: res.platform || 'General Web',
+            method: res.method || 'Unknown',
+            confidence: res.confidence || 85,
+            revenueAtRisk: res.revenueAtRisk || 0,
+            status: 'pending_review',
+            detectedAt: new Date().toISOString(),
+            orgId: userProfile?.orgId || null
+          });
+          
+          await addDoc(collection(db, 'audit_log'), {
+             actionType: 'SCAN_INITIATED',
+             entityType: 'url',
+             entityId: scanUrl,
+             user: userProfile?.email || 'unknown',
+             payloadHash: await generateHash(`SCAN${scanUrl}${new Date().toISOString()}`),
+             loggedAt: new Date().toISOString(),
+             verified: true
+          });
+
+          addToast(`Infringement detected with ${res.confidence}% confidence`, 'warning');
+        }
       } else {
         addToast('No infringement detected on the target URL', 'success');
       }
