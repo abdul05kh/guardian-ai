@@ -6,11 +6,11 @@
   <img src="https://img.shields.io/badge/License-MIT-green?style=for-the-badge" alt="MIT License" />
 </p>
 
-<h1 align="center">🛡️ GUARDIAN AI</h1>
-<h3 align="center">Real-Time Digital Asset Protection & Intelligent Crisis Response Platform</h3>
+<h1 align="center">🛡️ GUARDIAN AI 🌍</h1>
+<h3 align="center">Empowering Global Institutional Safety & Humanitarian Threat Mitigation</h3>
 
 <p align="center">
-  <strong>The industry-first unified platform that fuses real-time Digital Asset Protection with AI-powered Crisis Response — entirely on Google Cloud.</strong>
+  <strong>Built for the Google Solution Challenge 2026. Designed specifically to solve UN SDG 16 (Peace, Justice, and Strong Institutions) & UN SDG 9 (Industry, Innovation, and Infrastructure) via autonomous AI logic.</strong>
 </p>
 
 <p align="center">
@@ -26,14 +26,16 @@
 
 ---
 
-## 🎯 The Problem
+## 🎯 The Global Problem (UN SDG Alignment)
 
-| Digital Asset Piracy | Crisis Response |
+Guardian AI fundamentally addresses **UN Sustainable Development Goal 16 (Peace, Justice, and Strong Institutions)** and **Goal 9 (Industry, Innovation, and Infrastructure)**. As the world digitizes, institutions face two existential, rapidly scaling threats that human operators can no longer mitigate manually:
+
+| 🛡️ SDG 16: Defending Digital Intelligence | 🚨 SDG 9: Fortifying Public Infrastructure |
 |---|---|
-| $12B+ lost annually to unauthorized content distribution across platforms like Telegram, YouTube, TikTok, and the Dark Web | Emergency response in large venues is fragmented — fire, medical, and security incidents lack unified AI-driven coordination |
-| **No unified platform** tracks media propagation across the open web AND coordinates response in real-time | Existing solutions are siloed, expensive, and don't leverage AI for instant classification and action plan generation |
+| Deep-fake rings, institutional harassment, and structural piracy proliferate across the Dark Web, Telegram, and encrypted networks, causing trillions in economic suppression and institutional damage. | Global disaster response in crowded venues (fires, medical emergencies, terror incidents) suffers from horrific physical routing delays and fragmented communication. |
+| **The Solution**: An orchestrated multi-agent *Threat Network* swarm that autonomously maps, predicts, and targets malicious digital nodes utilizing graph-theoretic Fiedler models. | **The Solution**: An AI-powered *CrisisCommand* engine that instantly digests real-time venue variables to generate and broadcast life-saving evacuation routing and responder protocols. |
 
-**Guardian AI** is the only solution that solves **both problems** in one integrated intelligence layer.
+**Guardian AI** is the only ecosystem that fuses predictive cyber-threat mapping with physical infrastructure crisis response in one unified, un-simulated, autonomous intelligence layer.
 
 ---
 
