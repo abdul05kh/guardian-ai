@@ -71,13 +71,13 @@ export default function CrisisPage() {
     setTimeline([{
       time: new Date().toLocaleTimeString(),
       event: '🆘 SOS triggered',
-      detail: `Source: Manual trigger | Venue: ${selectedVenue.name}`,
+      detail: `Source: Manual trigger | Venue: ${selectedVenue?.name || 'Loading...'}`,
       type: 'danger',
     }]);
 
     // Step 1: AI Classification
     try {
-      const result = await classifyCrisis(desc, selectedVenue.type, 'Zone A');
+      const result = await classifyCrisis(desc, selectedVenue?.type || 'venue', 'Zone A');
       let parsed;
       try {
         parsed = typeof result === 'string' ? JSON.parse(result) : result;
@@ -117,7 +117,7 @@ export default function CrisisPage() {
       const planResult = await generateCrisisActionPlan(
         parsed.crisisType || 'security',
         parsed.severity || 'high',
-        selectedVenue.capacity,
+        selectedVenue?.capacity || 0,
         responders.length
       );
       
@@ -291,7 +291,7 @@ export default function CrisisPage() {
           venues.map(v => (
             <button
               key={v.id}
-              className={`venue-chip ${selectedVenue.id === v.id ? 'active' : ''}`}
+              className={`venue-chip ${selectedVenue?.id === v.id ? 'active' : ''}`}
               onClick={() => !crisisActive && setSelectedVenue(v)}
             >
               {v.type === 'Hotel' ? '🏨' : v.type === 'Stadium' ? '🏟️' : '🏢'} {v.name}
@@ -334,7 +334,7 @@ export default function CrisisPage() {
           <div className="card">
             <div className="card-header">
               <h3 className="card-title">🆘 Emergency Trigger</h3>
-              <span className="badge badge-blue">{selectedVenue.name}</span>
+              <span className="badge badge-blue">{selectedVenue?.name || 'Initializing...'}</span>
             </div>
             <div className="card-body">
               <div className="sos-container">
@@ -384,11 +384,11 @@ export default function CrisisPage() {
           <div className="card">
             <div className="card-header">
               <h3 className="card-title">🗺️ Venue Zones</h3>
-              <span style={{ fontSize: '12px', color: 'var(--text-muted)' }}>Capacity: {selectedVenue.capacity.toLocaleString()}</span>
+              <span style={{ fontSize: '12px', color: 'var(--text-muted)' }}>Capacity: {selectedVenue?.capacity?.toLocaleString() || '0'}</span>
             </div>
             <div className="card-body">
               <div className="zone-grid">
-                {selectedVenue.zones.map((zone, i) => (
+                {selectedVenue?.zones?.map((zone, i) => (
                   <div key={zone} className={`zone-tag ${crisisActive && i === 0 ? 'alert' : ''}`}>
                     {zone}
                   </div>
