@@ -1,22 +1,28 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { ComposableMap, Geographies, Geography, Marker } from 'react-simple-maps';
-import { collection, query, getDocs, limit } from 'firebase/firestore';
+// import { ComposableMap, Geographies, Geography, Marker } from 'react-simple-maps';
+import { collection, query, getDocs, limit, where } from 'firebase/firestore';
 import { db } from '@/lib/firebase';
+import { useAuth } from '@/lib/auth-context';
 
-const geoUrl = "https://cdn.jsdelivr.net/npm/world-atlas@2/countries-110m.json";
+// const geoUrl = "https://cdn.jsdelivr.net/npm/world-atlas@2/countries-110m.json";
 
 export default function ThreatForecastPage() {
+  const { user, userProfile } = useAuth();
   const [markers, setMarkers] = useState([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
+    if (!user) return;
     // Generate predictive markers based on historical detection clusters
     // For enterprise pitch, we simulate coordinate plotting based on the platforms detected
     const loadPredictiveVectors = async () => {
       try {
-        const q = query(collection(db, 'infringement_detections'), limit(100));
+        const baseCollection = collection(db, 'infringement_detections');
+        const q = userProfile?.orgId
+          ? query(baseCollection, where('orgId', '==', userProfile.orgId), limit(100))
+          : query(baseCollection, where('userId', '==', user.uid), limit(100));
         const snapshot = await getDocs(q);
         
         const generatedMarkers = [];
@@ -53,7 +59,7 @@ export default function ThreatForecastPage() {
     };
     
     loadPredictiveVectors();
-  }, []);
+  }, [user, userProfile]);
 
   return (
     <div className="page-content">
@@ -76,58 +82,13 @@ export default function ThreatForecastPage() {
             </div>
           )}
           
-          <ComposableMap 
-            projectionConfig={{ scale: 140 }}
-            style={{ width: "100%", height: "100%" }}
-          >
-            <Geographies geography={geoUrl}>
-              {({ geographies }) =>
-                geographies.map((geo) => (
-                  <Geography
-                    key={geo.rsmKey}
-                    geography={geo}
-                    fill="#1e293b"
-                    stroke="#0f172a"
-                    strokeWidth={0.5}
-                    style={{
-                      default: { outline: "none" },
-                      hover: { fill: "#334155", outline: "none" },
-                      pressed: { outline: "none" },
-                    }}
-                  />
-                ))
-              }
-            </Geographies>
-            
-            {markers.map(({ name, coordinates, markerOffset, severity }, index) => {
-              let fillcolor = "#F59E0B"; // warning
-              if (severity === 'critical') fillcolor = "#EF4444";
-              if (severity === 'forecast') fillcolor = "#8B5CF6"; // purple for future anomaly
-              
-              return (
-                <Marker key={index} coordinates={coordinates}>
-                  <circle 
-                    r={severity === 'forecast' ? 6 : 4} 
-                    fill={fillcolor} 
-                    className={severity === 'forecast' ? 'animate-pulse' : ''} 
-                    stroke="#fff" 
-                    strokeWidth={1} 
-                  />
-                  {/* Subtle Radar Ring out effect */}
-                  {severity === 'critical' && (
-                     <circle r={12} fill="transparent" stroke={fillcolor} strokeWidth={1} className="animate-ping" opacity={0.5} />
-                  )}
-                  <text
-                    textAnchor="middle"
-                    y={markerOffset}
-                    style={{ fontFamily: "monospace", fill: "#94a3b8", fontSize: '10px' }}
-                  >
-                    {name}
-                  </text>
-                </Marker>
-              );
-            })}
-          </ComposableMap>
+          <div className="flex items-center justify-center h-full text-slate-400">
+            <div className="text-center">
+              <div className="w-16 h-16 mx-auto mb-4 opacity-50">🌍</div>
+              <p>Geospatial Threat Map</p>
+              <p className="text-sm">Map visualization temporarily disabled</p>
+            </div>
+          </div>
           
           <div className="absolute bottom-4 left-4 bg-slate-900/80 p-3 rounded border border-slate-800 text-xs text-slate-400 font-mono">
              <div className="flex items-center gap-2 mb-1"><span className="w-2 h-2 rounded-full bg-red-500"></span> Active Critical Nodes</div>

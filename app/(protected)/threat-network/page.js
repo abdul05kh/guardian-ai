@@ -1,27 +1,31 @@
 'use client';
 
 import { useState, useEffect, useMemo, useRef, useCallback } from 'react';
-import { collection, query, onSnapshot, orderBy, limit, addDoc } from 'firebase/firestore';
+import { collection, query, onSnapshot, orderBy, limit, addDoc, where } from 'firebase/firestore';
 import { db } from '@/lib/firebase';
 import { runDeepResearchScan } from '@/lib/gemini';
+import { useAuth } from '@/lib/auth-context';
+import DOMPurify from 'dompurify';
 import dynamic from 'next/dynamic';
 
 // ForceGraph2D requires document/window to exist, so dynamically load it without SSR
 const ForceGraph2D = dynamic(() => import('react-force-graph-2d'), { ssr: false });
 
 export default function ThreatNetworkPage() {
+  const { user, userProfile } = useAuth();
   const [detections, setDetections] = useState([]);
   const [loading, setLoading] = useState(true);
   const [scanning, setScanning] = useState(false);
   const fgRef = useRef();
 
   useEffect(() => {
+    if (!user) return; // Wait for Firebase Auth to resolve
+
     // Listen to real infringement detections
-    const q = query(
-      collection(db, 'infringement_detections'),
-      orderBy('detectedAt', 'desc'),
-      limit(200)
-    );
+    const baseCollection = collection(db, 'infringement_detections');
+    const q = userProfile?.orgId
+      ? query(baseCollection, where('orgId', '==', userProfile.orgId), orderBy('detectedAt', 'desc'), limit(200))
+      : query(baseCollection, where('userId', '==', user.uid), orderBy('detectedAt', 'desc'), limit(200));
 
     const unsubscribe = onSnapshot(q, (snapshot) => {
       const data = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
@@ -33,7 +37,7 @@ export default function ThreatNetworkPage() {
     });
 
     return () => unsubscribe();
-  }, []);
+  }, [user, userProfile]);
 
   // Compute graph theoretic relationships (Adjacency via clustering)
   const graphData = useMemo(() => {
@@ -75,6 +79,26 @@ export default function ThreatNetworkPage() {
         value: 1
       });
 
+      // Cyber-Kinetic Link: Link Digital Threat to Physical Venue
+      if (det.correlatedVenue) {
+        const venueId = `venue-${det.correlatedVenue}`;
+        if (!entityMap.has(venueId)) {
+          entityMap.set(venueId, {
+            id: venueId,
+            name: det.correlatedVenue,
+            group: 4, // Physical Venues
+            val: 25,
+            color: '#8B5CF6' // Purple glow for physical targets
+          });
+          nodes.push(entityMap.get(venueId));
+        }
+        links.push({
+          source: detectNodeId,
+          target: venueId,
+          value: 3 // High gravity to pull them towards the physical target
+        });
+      }
+
       // Clustering Adjacency: Link detections together if they have the same uploader
       if (det.uploader) {
         const uploaderId = `user-${det.uploader}`;
@@ -110,8 +134,18 @@ export default function ThreatNetworkPage() {
   const handleRunDeepScan = async () => {
     setScanning(true);
     try {
-      const topic = prompt("Enter an asset or topic to initiate a Deep Intelligence Scan:", "Formula 1 2024 Final");
-      if (!topic) return;
+      const rawTopic = prompt("Enter an asset or topic to initiate a Deep Intelligence Scan:", "Formula 1 2024 Final");
+      if (!rawTopic) {
+        setScanning(false);
+        return;
+      }
+      
+      const topic = DOMPurify.sanitize(rawTopic);
+      if (!topic) {
+        alert("Invalid input detected. Scan aborted.");
+        setScanning(false);
+        return;
+      }
 
       // 1. Run actual Multi-Agent AI Swarm
       const aiResult = await runDeepResearchScan(topic);

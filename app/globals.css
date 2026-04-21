@@ -140,8 +140,9 @@ body {
   left: 0;
   z-index: 100;
   background: var(--bg-glass-heavy);
-  backdrop-filter: blur(20px);
-  -webkit-backdrop-filter: blur(20px);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  will-change: transform;
   border-right: 1px solid var(--border-subtle);
   display: flex;
   flex-direction: column;
@@ -339,8 +340,8 @@ body {
   align-items: center;
   justify-content: space-between;
   background: var(--bg-glass-heavy);
-  backdrop-filter: blur(20px);
-  -webkit-backdrop-filter: blur(20px);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
   border-bottom: 1px solid var(--border-subtle);
   position: sticky;
   top: 0;
@@ -419,14 +420,15 @@ body {
 
 .kpi-card {
   background: var(--bg-card);
-  backdrop-filter: blur(16px);
-  -webkit-backdrop-filter: blur(16px);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
   border: 1px solid var(--border-subtle);
   border-radius: var(--radius-lg);
   padding: 22px 24px;
   position: relative;
   overflow: hidden;
   transition: all var(--transition-base);
+  will-change: transform, box-shadow;
 }
 
 .kpi-card::before {
@@ -507,8 +509,8 @@ body {
 /* --- Cards / Panels --- */
 .card {
   background: var(--bg-card);
-  backdrop-filter: blur(16px);
-  -webkit-backdrop-filter: blur(16px);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
   border: 1px solid var(--border-subtle);
   border-radius: var(--radius-lg);
   overflow: hidden;

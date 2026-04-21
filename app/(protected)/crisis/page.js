@@ -2,9 +2,11 @@
 
 import { useState, useEffect } from 'react';
 import { classifyCrisis, generateCrisisActionPlan } from '@/lib/gemini';
-import { collection, query, onSnapshot } from 'firebase/firestore';
+import { collection, query, onSnapshot, where } from 'firebase/firestore';
 import { db } from '@/lib/firebase';
 import { useToast } from '@/lib/toast-context';
+import { useAuth } from '@/lib/auth-context';
+import DOMPurify from 'dompurify';
 
 const SAMPLE_VENUES_FALLBACK = [
   { id: 1, name: 'Grand Hyatt Mumbai', type: 'hotel', capacity: 800, zones: ['Lobby', 'Pool', 'Restaurant', 'Ballroom', 'Parking'] },
@@ -27,6 +29,7 @@ const SEVERITY_COLORS = {
 };
 
 export default function CrisisPage() {
+  const { user, userProfile } = useAuth();
   const { addToast } = useToast();
   const [venues, setVenues] = useState([]);
   const [selectedVenue, setSelectedVenue] = useState(null);
@@ -38,32 +41,102 @@ export default function CrisisPage() {
   const [crisisDescription, setCrisisDescription] = useState('');
   const [timeline, setTimeline] = useState([]);
   const [responders, setResponders] = useState(MOCK_RESPONDERS);
+  const [activeCrisisId, setActiveCrisisId] = useState(null);
+  const [crisisSource, setCrisisSource] = useState('manual');
+
+  // Cyber-Kinetic Hybrid Dispatch Listener
+  useEffect(() => {
+    if (!user) return;
+    const q = userProfile?.orgId
+      ? query(collection(db, 'active_crisis_events'), where('orgId', '==', userProfile.orgId), where('status', '==', 'active'))
+      : query(collection(db, 'active_crisis_events'), where('status', '==', 'active'));
+      
+    const unsub = onSnapshot(q, async (snap) => {
+      if (!snap.empty) {
+        const doc = snap.docs[0];
+        const evt = doc.data();
+        
+        setCrisisSource(evt.source);
+        setActiveCrisisId(doc.id);
+        setCrisisDescription(evt.description);
+        setCrisisData(evt.crisisData);
+        setCrisisActive(true);
+        setAlertsSent(true);
+        // Map responders
+        setResponders(prev => prev.map(r => ({
+          ...r,
+          status: 'responding',
+        })));
+        
+        // Auto-generate plan if missing
+        if (!actionPlan) {
+          try {
+            const planResult = await generateCrisisActionPlan(
+              evt.crisisData.crisisType || 'security',
+              evt.crisisData.severity || 'high',
+              selectedVenue?.capacity || 800,
+              MOCK_RESPONDERS.length
+            );
+            
+            let plan = typeof planResult === 'string' ? JSON.parse(planResult) : planResult;
+            setActionPlan(plan);
+          } catch(e) {
+            setActionPlan({ actions: [{ priority: 1, task: 'Investigate Hybrid Kinetic Threat', assignTo: 'Security', timeframe: '0-60s', critical: true }], evacuationRequired: false });
+          }
+        }
+      }
+    });
+    return () => unsub();
+  }, [user, userProfile, selectedVenue]);
 
   useEffect(() => {
-    const q = query(collection(db, 'venues'));
+    if (!user) return;
+    const baseCollection = collection(db, 'venues');
+    const q = userProfile?.orgId
+      ? query(baseCollection, where('orgId', '==', userProfile.orgId))
+      : query(baseCollection, where('userId', '==', user.uid));
     const unsubscribe = onSnapshot(q, (snapshot) => {
-      const fetched = snapshot.docs.map(doc => ({
-        id: doc.id,
-        zones: Array.from({length: doc.data().zones || 5}, (_, i) => `Zone ${String.fromCharCode(65+i)}`),
-        ...doc.data()
-      }));
-      setVenues(fetched.length ? fetched : SAMPLE_VENUES_FALLBACK);
-      if (!selectedVenue && fetched.length > 0) {
-        setSelectedVenue(fetched[0]);
-      } else if (!selectedVenue && fetched.length === 0) {
-        setSelectedVenue(SAMPLE_VENUES_FALLBACK[0]);
+      const fetched = snapshot.docs.map(doc => {
+        const data = doc.data();
+        let zoneList = [];
+        if (Array.isArray(data.zones)) {
+          zoneList = data.zones;
+        } else {
+          const count = parseInt(data.zones) || 5;
+          zoneList = Array.from({ length: count }, (_, i) => `Zone ${String.fromCharCode(65 + i)}`);
+        }
+        return {
+          id: doc.id,
+          ...data,
+          zones: zoneList
+        };
+      });
+
+      const finalVenues = fetched.length ? fetched : SAMPLE_VENUES_FALLBACK;
+      setVenues(finalVenues);
+      
+      if (!selectedVenue) {
+        setSelectedVenue(finalVenues[0]);
+      } else {
+        // Update selected venue if its data changed in Firestore
+        const updatedSelected = finalVenues.find(v => v.id === selectedVenue.id);
+        if (updatedSelected) setSelectedVenue(updatedSelected);
       }
     });
     return () => unsubscribe();
-  }, [selectedVenue]);
+  }, [user, userProfile, selectedVenue]);
 
   const triggerSOS = async () => {
     if (!selectedVenue) return;
-    if (!crisisDescription.trim()) {
-      setCrisisDescription('Emergency situation detected in the venue');
-    }
     
-    const desc = crisisDescription.trim() || 'Emergency situation detected in the venue';
+    // Sanitize user input to prevent XSS payloads in logs or AI engine
+    const rawDesc = crisisDescription.trim();
+    const sanitizedDesc = rawDesc ? DOMPurify.sanitize(rawDesc) : 'Emergency situation detected in the venue';
+    
+    // Safety check just in case sanitization strips everything (e.g. if input was just <script>)
+    const finalDesc = sanitizedDesc || 'Emergency situation detected in the venue';
+
+    setCrisisDescription(finalDesc);
     setCrisisActive(true);
     setClassifying(true);
     
@@ -77,7 +150,7 @@ export default function CrisisPage() {
 
     // Step 1: AI Classification
     try {
-      const result = await classifyCrisis(desc, selectedVenue?.type || 'venue', 'Zone A');
+      const result = await classifyCrisis(finalDesc, selectedVenue?.type || 'venue', 'Zone A');
       let parsed;
       try {
         parsed = typeof result === 'string' ? JSON.parse(result) : result;
@@ -142,7 +215,7 @@ export default function CrisisPage() {
     }
   };
 
-  const resolveCrisis = () => {
+  const resolveCrisis = async () => {
     addToast('Crisis resolved and logged to TrustLedger', 'success');
     setTimeline(prev => [...prev, {
       time: new Date().toLocaleTimeString(),
@@ -150,6 +223,12 @@ export default function CrisisPage() {
       detail: 'All actions completed. Incident logged to TrustLedger.',
       type: 'success',
     }]);
+
+    if (activeCrisisId) {
+      const { doc, updateDoc } = await import('firebase/firestore');
+      await updateDoc(doc(db, 'active_crisis_events', activeCrisisId), { status: 'resolved' });
+    }
+
     setTimeout(() => {
       setCrisisActive(false);
       setCrisisData(null);
@@ -158,6 +237,8 @@ export default function CrisisPage() {
       setTimeline([]);
       setResponders(MOCK_RESPONDERS);
       setCrisisDescription('');
+      setActiveCrisisId(null);
+      setCrisisSource('manual');
     }, 2000);
   };
 
@@ -315,7 +396,7 @@ export default function CrisisPage() {
         }}>
           <div>
             <div style={{ fontSize: '16px', fontWeight: 700, fontFamily: 'var(--font-heading)', color: SEVERITY_COLORS[crisisData.severity]?.color }}>
-              🚨 ACTIVE CRISIS — {crisisData.crisisType?.toUpperCase()} | Severity: {crisisData.severity?.toUpperCase()}
+              🚨 {crisisSource === 'cyber_kinetic_engine' ? 'PREDICTIVE CYBER-KINETIC THREAT' : 'ACTIVE EMERGENCY'} — {crisisData.crisisType?.toUpperCase()} | Severity: {crisisData.severity?.toUpperCase()}
             </div>
             <div style={{ fontSize: '13px', color: 'var(--text-secondary)', marginTop: '4px' }}>
               {crisisData.briefing}

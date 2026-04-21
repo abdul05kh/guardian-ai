@@ -1,9 +1,9 @@
 'use client';
 
-import { useState, useRef } from 'react';
+import { useState, useRef, useEffect } from 'react';
 import { useAuth } from '@/lib/auth-context';
 import { db, storage } from '@/lib/firebase';
-import { collection, addDoc, serverTimestamp, query, orderBy, limit, getDocs } from 'firebase/firestore';
+import { collection, addDoc, serverTimestamp, query, orderBy, limit, getDocs, where, onSnapshot } from 'firebase/firestore';
 import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
 import { generateHash } from '@/lib/crypto';
 import { analyzeMediaContent } from '@/lib/gemini';
@@ -31,7 +31,7 @@ const TYPE_ICONS = {
 };
 
 export default function AssetsPage() {
-  const { user } = useAuth();
+  const { user, userProfile } = useAuth();
   const fileInputRef = useRef(null);
   const [assets, setAssets] = useState(SAMPLE_ASSETS);
   const [uploading, setUploading] = useState(false);
@@ -42,6 +42,31 @@ export default function AssetsPage() {
   const [dragOver, setDragOver] = useState(false);
   const [selectedAsset, setSelectedAsset] = useState(null);
   const [aiAnalysis, setAiAnalysis] = useState(null);
+  const [mounted, setMounted] = useState(false);
+
+  useEffect(() => {
+    setMounted(true);
+  }, []);
+
+  useEffect(() => {
+    if (!user) return;
+
+    const baseCollection = collection(db, 'digital_assets');
+    const q = userProfile?.orgId
+      ? query(baseCollection, where('orgId', '==', userProfile.orgId))
+      : query(baseCollection, where('uploadedBy', '==', user.uid));
+
+    const unsubscribe = onSnapshot(q, (snapshot) => {
+      if (snapshot.empty) {
+        setAssets(SAMPLE_ASSETS);
+        return;
+      }
+
+      setAssets(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })));
+    });
+
+    return () => unsubscribe();
+  }, [user, userProfile]);
 
   const handleUpload = async (file) => {
     if (!file) return;
@@ -78,6 +103,8 @@ export default function AssetsPage() {
           perceptualHash: hash.substring(0, 16),
           status: 'active',
           uploadedBy: user.uid,
+          userId: user.uid,
+          orgId: userProfile?.orgId || null,
           createdAt: serverTimestamp(),
           violations: 0,
         });
@@ -142,6 +169,8 @@ export default function AssetsPage() {
       setAiAnalysis({ error: 'AI analysis failed. Configure Gemini API key for live analysis.' });
     }
   };
+
+  if (!mounted) return <div className="page-content"><div className="spinner" /></div>;
 
   return (
     <div className="page-content">

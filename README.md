@@ -33,9 +33,9 @@ Guardian AI fundamentally addresses **UN Sustainable Development Goal 16 (Peace,
 | 🛡️ SDG 16: Defending Digital Intelligence | 🚨 SDG 9: Fortifying Public Infrastructure |
 |---|---|
 | Deep-fake rings, institutional harassment, and structural piracy proliferate across the Dark Web, Telegram, and encrypted networks, causing trillions in economic suppression and institutional damage. | Global disaster response in crowded venues (fires, medical emergencies, terror incidents) suffers from horrific physical routing delays and fragmented communication. |
-| **The Solution**: An orchestrated multi-agent *Threat Network* swarm that autonomously maps, predicts, and targets malicious digital nodes utilizing graph-theoretic Fiedler models. | **The Solution**: An AI-powered *CrisisCommand* engine that instantly digests real-time venue variables to generate and broadcast life-saving evacuation routing and responder protocols. |
+| **The Solution**: An orchestrated multi-agent *Threat Network* swarm that autonomously maps, predicts, and targets malicious digital nodes utilizing graph-theoretic Fiedler models. | **The Solution**: A **Predictive Cyber-Kinetic Engine** that dynamically bridges dark-web digital threats straight into physical security dispatches for immediate emergency mitigation. |
 
-**Guardian AI** is the only ecosystem that fuses predictive cyber-threat mapping with physical infrastructure crisis response in one unified, un-simulated, autonomous intelligence layer.
+**Guardian AI** is the world's first AI Correlation Engine that fuses predictive cyber-threat mapping with physical infrastructure crisis response in one unified, autonomous intelligence layer.
 
 ---
 
@@ -47,11 +47,11 @@ Guardian AI fundamentally addresses **UN Sustainable Development Goal 16 (Peace,
 - **AI-Powered Analysis** — Gemini AI classifies content, assesses protection priority, and identifies key features
 - **Automated DMCA Generation** — One-click legally-formatted DMCA takedown notices via Gemini AI
 
-### 🚨 Crisis Response
-- **SOS Emergency Trigger** — One-button emergency activation with AI crisis classification
-- **Responder Coordination** — Real-time responder board with role-based status tracking
-- **AI Action Plans** — Gemini generates step-by-step response protocols based on crisis type
-- **Multi-Venue Management** — Configure zones, capacities, and responder assignments per venue
+### 🚨 Crisis Response & Cyber-Kinetic Correlation
+- **Predictive Cyber-Kinetic Threats** — Deep-web digital investigations dynamically trigger and dispatch physical SOS alerts when a venue acts as a target location.
+- **SOS Emergency Trigger** — One-button emergency activation with AI crisis classification.
+- **Responder Coordination** — Real-time responder board explicitly designed for hybrid threat management.
+- **AI Action Plans** — Gemini generates step-by-step physical response protocols bridging digital to kinetic variables.
 
 ### 📋 Compliance & Audit
 - **TrustLedger™** — Immutable cryptographic audit trail with SHA-256 hash chain verification
@@ -255,16 +255,16 @@ Real-time command center with 6 KPI cards, auto-updating event feed (new events 
 Digital asset protection hub. Upload media files (video, audio, image, document) with automatic SHA-256 fingerprinting. Trigger cross-platform scans across 7 platforms. Run AI analysis via Gemini for content classification, protection priority, and uniqueness scoring.
 
 ### CrisisCommand™ (`/crisis`)
-AI-powered emergency response. Select venues, describe emergencies, and trigger SOS alerts. Gemini AI classifies crisis severity and generates action plans. Real-time responder board tracks personnel status and zone assignments. Supports multi-venue configurations.
+AI-powered predictive and reactive emergency response. Receives auto-dispatched alerts from the **Predictive Cyber-Kinetic Engine** explicitly detailing hybrid digital-physical targeting. Gemini AI generates automated sweep-and-clear protocols. Real-time responder board tracks personnel status and zone assignments.
 
 ### TrustLedger™ (`/audit`)
 Immutable cryptographic audit trail. Every platform action is logged with SHA-256 hashes forming a verifiable chain. Supports hash integrity verification, compliance badge tracking (GDPR, SOC2, DPDP, ISO 27001), and CSV export for regulatory submissions.
 
 ### Detections (`/detections`)
-Infringement tracking table with confidence scores, detection methods (perceptual hash, Vertex Vision, audio fingerprint), revenue-at-risk calculations, and one-click DMCA notice generation via Gemini AI.
+Infringement tracking table explicitly bridged into live real-world targets. Flags threats using visual hashes, calculates revenue-at-risk, and detects if the malicious traffic targets a physical correlated venue. Provides zero-touch DMCA notice generation via Gemini AI.
 
 ### Threat Network (`/threat-network`)
-Deep Research Intelligence module utilizing an autonomous multi-agent swarm to construct ForceGraph projections of piracy clusters and generate Fiedler eigenvalue threat scores. 
+Deep Research Intelligence module utilizing an autonomous multi-agent swarm to construct ForceGraph projections of piracy clusters. **Includes Spatial Bridging:** Digital Threat nodes gravitate visually toward Physical Venue nodes in the graphing view, highlighting exactly where the cyber-attack is pointing in the real world. 
 
 ### Predictive Forecast (`/forecast`)
 Geospatial Threat Mapping dashboard visualizing pre-crime vulnerability indexes and predicting incoming digital asset infringement vectors prior to exploitation utilizing SVG map rendering.

@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, memo } from 'react';
 import { usePathname } from 'next/navigation';
 import { useAuth } from '@/lib/auth-context';
 
@@ -15,7 +15,7 @@ const PAGE_TITLES = {
   '/settings': { title: 'Settings', subtitle: 'Platform configuration' },
 };
 
-export default function Header({ onMenuClick }) {
+function Header({ onMenuClick }) {
   const pathname = usePathname();
   const { user } = useAuth();
   const pageInfo = PAGE_TITLES[pathname] || { title: 'Guardian AI', subtitle: '' };
@@ -65,3 +65,5 @@ export default function Header({ onMenuClick }) {
     </header>
   );
 }
+
+export default memo(Header);

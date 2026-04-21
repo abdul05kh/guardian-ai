@@ -19,7 +19,15 @@ import {
 import { Line } from 'react-chartjs-2';
 import dynamic from 'next/dynamic';
 
-const DashboardMap = dynamic(() => import('@/app/components/Map'), { ssr: false });
+const DashboardMap = dynamic(() => import('@/app/components/Map'), { 
+  ssr: false,
+  loading: () => <div className="map-placeholder">Loading Intelligence Map...</div>
+});
+
+const Chart = dynamic(() => import('react-chartjs-2').then(mod => mod.Line), {
+  ssr: false,
+  loading: () => <div className="chart-placeholder">Initializing Analytics...</div>
+});
 
 ChartJS.register(CategoryScale, LinearScale, PointElement, LineElement, BarElement, Title, Tooltip, Legend, Filler);
 
@@ -46,28 +54,32 @@ const EVENT_TYPES = {
 };
 
 export default function DashboardPage() {
-  const { user } = useAuth();
+  const { user, userProfile } = useAuth();
   const [events, setEvents] = useState([]);
-  const [chartLoaded, setChartLoaded] = useState(false);
+  const [chartLoaded, setChartLoaded] = useState(true);
+  const [chartData, setChartData] = useState([12, 34, 23, 45, 67, 89, 54]);
   const kpis = useMemo(() => generateKPIData(), []);
   
   // Real KPIs state
-  const [assetsCount, setAssetsCount] = useState(0);
-  const [violationsCount, setViolationsCount] = useState(0);
-  const [activeCrises, setActiveCrises] = useState(0);
-  const [dmcaSent, setDmcaSent] = useState(0);
-  const [chartData, setChartData] = useState([]);
+  const [stats, setStats] = useState({
+    assets: 0,
+    violations: 0,
+    crises: 0,
+    dmca: 0
+  });
 
   useEffect(() => {
-    setChartLoaded(true);
-    
-    // Simulate generic time-series data for the analytical chart
-    const days = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
-    setChartData(days.map(day => Math.floor(Math.random() * 50) + 10));
-    
-    // Listen to live events (audit log)
-    const auditQuery = query(collection(db, 'audit_log'), orderBy('loggedAt', 'desc'), limit(15));
-    const unsubscribeAudit = onSnapshot(auditQuery, (snapshot) => {
+    if (!user) return;
+
+    // Batch Firestore Initializations
+    const unsubs = [];
+
+    // 1. Audit Log (most frequent updates)
+    const auditBase = collection(db, 'audit_log');
+    const auditQuery = userProfile?.orgId
+      ? query(auditBase, where('orgId', '==', userProfile.orgId), orderBy('loggedAt', 'desc'), limit(15))
+      : query(auditBase, orderBy('loggedAt', 'desc'), limit(15));
+    unsubs.push(onSnapshot(auditQuery, (snapshot) => {
       const logs = snapshot.docs.map(doc => {
         const data = doc.data();
         const eventMeta = EVENT_TYPES[data.actionType] || { icon: '📝', color: 'var(--blue-primary)', type: 'info' };
@@ -81,22 +93,35 @@ export default function DashboardPage() {
         };
       });
       setEvents(logs);
-    });
+    }, (err) => console.error("Dashboard Audit Error:", err)));
 
-    // Listen to KPIs
-    const assetsUnsub = onSnapshot(collection(db, 'digital_assets'), (snap) => setAssetsCount(snap.size));
-    const detUnsub = onSnapshot(collection(db, 'infringement_detections'), (snap) => setViolationsCount(snap.size));
-    const dmcaUnsub = onSnapshot(query(collection(db, 'infringement_detections'), where('status', '==', 'dmca_sent')), (snap) => setDmcaSent(snap.size));
-    const crisisUnsub = onSnapshot(query(collection(db, 'crisis_events'), where('status', '==', 'active')), (snap) => setActiveCrises(snap.size));
-
-    return () => {
-      unsubscribeAudit();
-      assetsUnsub();
-      detUnsub();
-      dmcaUnsub();
-      crisisUnsub();
+    // 2. Aggregate Meta-Data Listeners (throttled updates for counts)
+    const updateStats = (key, value) => {
+      setStats(prev => ({ ...prev, [key]: value }));
     };
-  }, []);
+
+    const assetsQuery = userProfile?.orgId
+      ? query(collection(db, 'digital_assets'), where('orgId', '==', userProfile.orgId))
+      : query(collection(db, 'digital_assets'), where('uploadedBy', '==', user.uid));
+    unsubs.push(onSnapshot(assetsQuery, (snap) => updateStats('assets', snap.size)));
+
+    const violationsQuery = userProfile?.orgId
+      ? query(collection(db, 'infringement_detections'), where('orgId', '==', userProfile.orgId))
+      : query(collection(db, 'infringement_detections'), where('userId', '==', user.uid));
+    unsubs.push(onSnapshot(violationsQuery, (snap) => updateStats('violations', snap.size)));
+
+    const dmcaQuery = userProfile?.orgId
+      ? query(collection(db, 'infringement_detections'), where('orgId', '==', userProfile.orgId), where('status', '==', 'dmca_sent'))
+      : query(collection(db, 'infringement_detections'), where('status', '==', 'dmca_sent'), where('userId', '==', user.uid));
+    unsubs.push(onSnapshot(dmcaQuery, (snap) => updateStats('dmca', snap.size)));
+
+    const crisesQuery = userProfile?.orgId
+      ? query(collection(db, 'crisis_events'), where('orgId', '==', userProfile.orgId), where('status', '==', 'active'))
+      : query(collection(db, 'crisis_events'), where('status', '==', 'active'), where('userId', '==', user.uid));
+    unsubs.push(onSnapshot(crisesQuery, (snap) => updateStats('crises', snap.size)));
+
+    return () => unsubs.forEach(unsub => unsub());
+  }, [user]);
 
   return (
     <div className="page-content">
@@ -234,7 +259,7 @@ export default function DashboardPage() {
             <span className="kpi-label">Assets Protected</span>
             <div className="kpi-icon blue">🛡️</div>
           </div>
-          <div className="kpi-value kpi-value-animated">{assetsCount.toLocaleString()}</div>
+          <div className="kpi-value kpi-value-animated">{stats.assets.toLocaleString()}</div>
           <div className={`kpi-change positive`}>
             Live from Firestore
           </div>
@@ -245,7 +270,7 @@ export default function DashboardPage() {
             <span className="kpi-label">Detected Violations</span>
             <div className="kpi-icon danger">🔍</div>
           </div>
-          <div className="kpi-value kpi-value-animated" style={{ color: 'var(--danger-glow)' }}>{violationsCount}</div>
+          <div className="kpi-value kpi-value-animated" style={{ color: 'var(--danger-glow)' }}>{stats.violations}</div>
           <div className="kpi-change negative">
             Live from Firestore
           </div>
@@ -256,8 +281,8 @@ export default function DashboardPage() {
             <span className="kpi-label">Active Crises</span>
             <div className="kpi-icon warning">🚨</div>
           </div>
-          <div className="kpi-value kpi-value-animated" style={{ color: activeCrises > 0 ? 'var(--warning-glow)' : 'var(--success-glow)' }}>
-            {activeCrises}
+          <div className="kpi-value kpi-value-animated" style={{ color: stats.crises > 0 ? 'var(--warning-glow)' : 'var(--success-glow)' }}>
+            {stats.crises}
           </div>
           <div className="kpi-change positive">
             Live from Firestore
@@ -269,7 +294,7 @@ export default function DashboardPage() {
             <span className="kpi-label">DMCA Notices Sent</span>
             <div className="kpi-icon success">⚖️</div>
           </div>
-          <div className="kpi-value kpi-value-animated">{dmcaSent}</div>
+          <div className="kpi-value kpi-value-animated">{stats.dmca}</div>
           <div className="kpi-change positive">
             Live from Firestore
           </div>
@@ -319,7 +344,7 @@ export default function DashboardPage() {
         </div>
         <div className="card-body" style={{ height: '300px', padding: '20px' }}>
           {chartLoaded && chartData.length > 0 ? (
-            <Line 
+            <Chart 
               data={{
                 labels: ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'],
                 datasets: [
@@ -349,8 +374,8 @@ export default function DashboardPage() {
               }}
             />
           ) : (
-             <div style={{ height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--text-muted)' }}>
-               Loading Analytics...
+             <div className="chart-placeholder" style={{ height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--text-muted)' }}>
+               Initializing Analytics Engine...
              </div>
           )}
         </div>

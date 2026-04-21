@@ -22,17 +22,17 @@ export default function SettingsPage() {
 
   useEffect(() => {
     if (userProfile) {
-      setProfileData({
+      setProfileData({ // eslint-disable-line react-hooks/set-state-in-effect
         displayName: userProfile.displayName || '',
         role: userProfile.role || 'Admin'
       });
-      setConfigData({
+      setConfigData({ // eslint-disable-line react-hooks/set-state-in-effect
         geminiApiKey: userProfile.geminiApiKey || '',
         organizationName: userProfile.organizationName || '',
         scanFrequency: userProfile.scanFrequency || 'Daily'
       });
     } else if (user) {
-      setProfileData(prev => ({ ...prev, displayName: user.displayName || '' }));
+      setProfileData(prev => ({ ...prev, displayName: user.displayName || '' })); // eslint-disable-line react-hooks/set-state-in-effect
     }
   }, [userProfile, user]);
 

@@ -1,13 +1,13 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { collection, query, onSnapshot, addDoc, deleteDoc, doc, limit } from 'firebase/firestore';
+import { collection, query, onSnapshot, addDoc, deleteDoc, doc, limit, where } from 'firebase/firestore';
 import { db } from '@/lib/firebase';
 import { useAuth } from '@/lib/auth-context';
 import { useToast } from '@/lib/toast-context';
 
 export default function PoliciesPage() {
-  const { userProfile } = useAuth();
+  const { user, userProfile } = useAuth();
   const { addToast } = useToast();
   const [policies, setPolicies] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -19,7 +19,11 @@ export default function PoliciesPage() {
   const [submitting, setSubmitting] = useState(false);
 
   useEffect(() => {
-    const q = query(collection(db, 'enforcement_policies'), limit(50));
+    if (!user) return;
+    const baseCollection = collection(db, 'enforcement_policies');
+    const q = userProfile?.orgId
+      ? query(baseCollection, where('orgId', '==', userProfile.orgId), limit(50))
+      : query(baseCollection, where('userId', '==', user.uid), limit(50));
     const unsubscribe = onSnapshot(q, (snapshot) => {
       const data = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
       setPolicies(data);
@@ -30,7 +34,7 @@ export default function PoliciesPage() {
     });
 
     return () => unsubscribe();
-  }, []);
+  }, [user, userProfile]);
 
   const handleCreatePolicy = async (e) => {
     e.preventDefault();
@@ -39,6 +43,7 @@ export default function PoliciesPage() {
     try {
       await addDoc(collection(db, 'enforcement_policies'), {
         orgId: userProfile?.orgId || 'default-org',
+        userId: user?.uid || null,
         createdBy: userProfile?.email || 'admin',
         targetPlatform,
         confidenceThreshold: Number(confidenceThreshold),

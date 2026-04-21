@@ -2,14 +2,14 @@
 
 import { useState, useEffect } from 'react';
 import { generateDMCANotice, scanExternalUrl } from '@/lib/gemini';
-import { collection, query, orderBy, onSnapshot, doc, updateDoc, addDoc } from 'firebase/firestore';
+import { collection, query, orderBy, onSnapshot, doc, updateDoc, addDoc, where } from 'firebase/firestore';
 import { db } from '@/lib/firebase';
-import { generateHash } from '@/lib/crypto';
+import { generateHash, createAuditEntry } from '@/lib/crypto';
 import { useAuth } from '@/lib/auth-context';
 import { useToast } from '@/lib/toast-context';
 
 export default function DetectionsPage() {
-  const { userProfile } = useAuth();
+  const { user, userProfile } = useAuth();
   const { addToast } = useToast();
   const [detections, setDetections] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -21,10 +21,12 @@ export default function DetectionsPage() {
   const [isScanning, setIsScanning] = useState(false);
 
   useEffect(() => {
-    const q = query(
-      collection(db, 'infringement_detections'),
-      orderBy('detectedAt', 'desc')
-    );
+    if (!user) return;
+
+    const baseCollection = collection(db, 'infringement_detections');
+    const q = userProfile?.orgId
+      ? query(baseCollection, where('orgId', '==', userProfile.orgId), orderBy('detectedAt', 'desc'))
+      : query(baseCollection, where('userId', '==', user.uid), orderBy('detectedAt', 'desc'));
 
     const unsubscribe = onSnapshot(q, (snapshot) => {
       const dets = snapshot.docs.map(doc => ({
@@ -39,7 +41,7 @@ export default function DetectionsPage() {
     });
 
     return () => unsubscribe();
-  }, []);
+  }, [user, userProfile]);
 
   const handleGenerateDMCA = async (detection) => {
     setGeneratingDMCA(detection.id);
@@ -105,14 +107,17 @@ export default function DetectionsPage() {
               });
 
               // 3. Drop to TrustLedger Cryptographically
+              const autoLog = await createAuditEntry({
+                userId: user.uid,
+                orgId: userProfile?.orgId || null,
+                actionType: 'AUTO_DMCA_DISPATCHED',
+                entityType: 'dmca_notice',
+                entityId: detectionRef.id,
+                payload: `AUTO_DMCA_${detectionRef.id}_${new Date().toISOString()}`,
+              });
               await addDoc(collection(db, 'audit_log'), {
-                 actionType: 'AUTO_DMCA_DISPATCHED',
-                 entityType: 'dmca_notice',
-                 entityId: detectionRef.id,
+                 ...autoLog,
                  user: 'SYSTEM_ZERO_TOUCH',
-                 payloadHash: await generateHash(`AUTO_DMCA${detectionRef.id}${new Date().toISOString()}`),
-                 loggedAt: new Date().toISOString(),
-                 verified: true,
                  ruleApplied: p.id
               });
               
@@ -135,21 +140,43 @@ export default function DetectionsPage() {
             confidence: res.confidence || 85,
             revenueAtRisk: res.revenueAtRisk || 0,
             status: 'pending_review',
+            correlatedVenue: res.correlatedVenue || null,
             detectedAt: new Date().toISOString(),
             orgId: userProfile?.orgId || null
           });
           
-          await addDoc(collection(db, 'audit_log'), {
-             actionType: 'SCAN_INITIATED',
-             entityType: 'url',
-             entityId: scanUrl,
-             user: userProfile?.email || 'unknown',
-             payloadHash: await generateHash(`SCAN${scanUrl}${new Date().toISOString()}`),
-             loggedAt: new Date().toISOString(),
-             verified: true
-          });
+          if (res.kineticThreat) {
+            await addDoc(collection(db, 'active_crisis_events'), {
+              orgId: userProfile?.orgId || null,
+              source: 'cyber_kinetic_engine',
+              venue: res.correlatedVenue || 'Unknown Venue',
+              description: `Cyber-Kinetic Threat: A digital attack vector has been classified as a kinetic trigger.`,
+              crisisData: {
+                crisisType: 'security',
+                severity: 'critical',
+                confidence: (res.confidence || 85) / 100,
+                briefing: `Predictive Alert: Coordinated digital threat targeting ${res.correlatedVenue || 'a physical location'}. Immediate physical mobilization recommended.`
+              },
+              status: 'active',
+              createdAt: new Date().toISOString()
+            });
+            addToast('⚠️ CYBER-KINETIC HYBRID THREAT DETECTED: Escalating to Crisis Command', 'danger');
+          } else {
+            addToast(`Infringement detected with ${res.confidence}% confidence`, 'warning');
+          }
 
-          addToast(`Infringement detected with ${res.confidence}% confidence`, 'warning');
+          const scanLog = await createAuditEntry({
+            userId: user.uid,
+            orgId: userProfile?.orgId || null,
+            actionType: 'SCAN_INITIATED',
+            entityType: 'url',
+            entityId: scanUrl,
+            payload: `SCAN_${scanUrl}_${new Date().toISOString()}`,
+          });
+          await addDoc(collection(db, 'audit_log'), {
+             ...scanLog,
+             user: userProfile?.email || 'unknown'
+          });
         }
       } else {
         addToast('No infringement detected on the target URL', 'success');
@@ -181,7 +208,7 @@ export default function DetectionsPage() {
         </div>
         <div style={{ padding: '10px 18px', background: 'rgba(139, 92, 246, 0.06)', border: '1px solid rgba(139, 92, 246, 0.2)', borderRadius: 'var(--radius-md)', display: 'flex', alignItems: 'center', gap: '8px' }}>
           <span style={{ fontFamily: 'var(--font-heading)', fontSize: '20px', fontWeight: 700, color: 'var(--purple-glow)' }}>
-            ${(detections.reduce((sum, d) => sum + d.revenueAtRisk, 0) / 1000).toFixed(0)}K
+            ${(detections.reduce((sum, d) => sum + (d.revenueAtRisk || 0), 0) / 1000).toFixed(0)}K
           </span>
           <span style={{ fontSize: '12px', color: 'var(--text-muted)' }}>Revenue at Risk</span>
         </div>
@@ -219,7 +246,7 @@ export default function DetectionsPage() {
                   </td>
                   <td><span className="badge badge-purple">{d.method}</span></td>
                   <td style={{ fontFamily: 'var(--font-mono)', color: d.revenueAtRisk > 0 ? 'var(--danger-glow)' : 'var(--text-muted)' }}>
-                    ${d.revenueAtRisk.toLocaleString()}
+                    ${(d.revenueAtRisk || 0).toLocaleString()}
                   </td>
                   <td><span className={`badge ${statusStyles[d.status]?.badge}`}>{statusStyles[d.status]?.label}</span></td>
                   <td>
@@ -270,17 +297,17 @@ export default function DetectionsPage() {
                     dmcaSentAt: new Date().toISOString()
                   });
                   
-                  const payloadString = 'DMCA_ISSUED' + detId + new Date().toISOString();
-                  const hash = await generateHash(payloadString);
-                  
-                  await addDoc(collection(db, 'audit_log'), {
+                  const dmcaLog = await createAuditEntry({
+                    userId: user.uid,
+                    orgId: userProfile?.orgId || null,
                     actionType: 'DMCA_ISSUED',
                     entityType: 'dmca_notice',
                     entityId: detId,
-                    user: userProfile?.email || 'unknown',
-                    payloadHash: hash,
-                    loggedAt: new Date().toISOString(),
-                    verified: true
+                    payload: `DMCA_ISSUED_${detId}_${new Date().toISOString()}`,
+                  });
+                  await addDoc(collection(db, 'audit_log'), {
+                    ...dmcaLog,
+                    user: userProfile?.email || 'unknown'
                   });
                   
                   addToast(`DMCA Notice dispatched for ${dmcaNotice.detection.assetName}`, 'success');

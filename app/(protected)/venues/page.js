@@ -1,24 +1,28 @@
 'use client';
 import { useState, useEffect } from 'react';
-import { collection, query, onSnapshot, addDoc } from 'firebase/firestore';
+import { collection, query, onSnapshot, addDoc, where } from 'firebase/firestore';
 import { db } from '@/lib/firebase';
 import { useAuth } from '@/lib/auth-context';
 import { useToast } from '@/lib/toast-context';
 
 export default function VenuesPage() {
-  const { userProfile } = useAuth();
+  const { user, userProfile } = useAuth();
   const { addToast } = useToast();
   const [venues, setVenues] = useState([]);
   const [showAdd, setShowAdd] = useState(false);
   const [newVenue, setNewVenue] = useState({ name: '', type: 'Hotel', capacity: '', zones: '' });
 
   useEffect(() => {
-    const q = query(collection(db, 'venues'));
+    if (!user) return;
+    const baseCollection = collection(db, 'venues');
+    const q = userProfile?.orgId
+      ? query(baseCollection, where('orgId', '==', userProfile.orgId))
+      : query(baseCollection, where('userId', '==', user.uid));
     const unsubscribe = onSnapshot(q, (snapshot) => {
       setVenues(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })));
     });
     return () => unsubscribe();
-  }, []);
+  }, [user, userProfile]);
 
   const handleAddVenue = async () => {
     if (!newVenue.name) return;
@@ -29,6 +33,7 @@ export default function VenuesPage() {
         zones: parseInt(newVenue.zones) || 1,
         status: 'active',
         orgId: userProfile?.orgId || null,
+        userId: user?.uid || null,
       });
       addToast(`Venue ${newVenue.name} added successfully`, 'success');
       setShowAdd(false);
@@ -63,7 +68,7 @@ export default function VenuesPage() {
         ))}
         {venues.length === 0 && (
           <div style={{ padding: '40px', textAlign: 'center', color: 'var(--text-muted)', gridColumn: '1 / -1' }}>
-            No venues registered yet. Click "Add Venue" to get started.
+            No venues registered yet. Click &quot;Add Venue&quot; to get started.
           </div>
         )}
       </div>

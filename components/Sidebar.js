@@ -3,6 +3,7 @@
 import { usePathname } from 'next/navigation';
 import Link from 'next/link';
 import { useAuth } from '@/lib/auth-context';
+import { memo } from 'react';
 
 const NAV_ITEMS = [
   { section: 'COMMAND CENTER' },
@@ -24,7 +25,7 @@ const NAV_ITEMS = [
   { href: '/settings', icon: '⚙️', label: 'Settings', badge: null },
 ];
 
-export default function Sidebar({ isOpen, onToggle }) {
+function Sidebar({ isOpen, onToggle }) {
   const pathname = usePathname();
   const { user, userProfile, logout } = useAuth();
 
@@ -92,3 +93,5 @@ export default function Sidebar({ isOpen, onToggle }) {
     </aside>
   );
 }
+
+export default memo(Sidebar);

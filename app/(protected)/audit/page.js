@@ -1,8 +1,9 @@
 'use client';
 
 import { useState, useEffect } from 'react';
+import { useAuth } from '@/lib/auth-context';
 import { generateHash, verifyHash } from '@/lib/crypto';
-import { collection, query, orderBy, onSnapshot } from 'firebase/firestore';
+import { collection, query, orderBy, where, onSnapshot } from 'firebase/firestore';
 import { db } from '@/lib/firebase';
 
 const ACTION_ICONS = {
@@ -20,11 +21,15 @@ export default function AuditPage() {
   const [entries, setEntries] = useState([]);
   const [loading, setLoading] = useState(true);
 
+  const { user, userProfile } = useAuth();
+
   useEffect(() => {
-    const q = query(
-      collection(db, 'audit_log'),
-      orderBy('loggedAt', 'desc')
-    );
+    if (!user) return;
+
+    const baseCollection = collection(db, 'audit_log');
+    const q = userProfile?.orgId
+      ? query(baseCollection, where('orgId', '==', userProfile.orgId), orderBy('loggedAt', 'desc'))
+      : query(baseCollection, where('userId', '==', user.uid), orderBy('loggedAt', 'desc'));
 
     const unsubscribe = onSnapshot(q, (snapshot) => {
       const logs = snapshot.docs.map(doc => ({
@@ -39,7 +44,7 @@ export default function AuditPage() {
     });
 
     return () => unsubscribe();
-  }, []);
+  }, [user]);
   const [verifyInput, setVerifyInput] = useState('');
   const [verifyResult, setVerifyResult] = useState(null);
   const [selectedEntry, setSelectedEntry] = useState(null);
@@ -49,12 +54,12 @@ export default function AuditPage() {
     if (!verifyInput.trim()) return;
     const entry = entries.find(e => e.entityId === verifyInput || e.payloadHash.startsWith(verifyInput));
     if (entry) {
-      const recomputed = await generateHash(entry.actionType + entry.entityId + entry.loggedAt);
+      const valid = entry.payload ? await verifyHash(entry.payload, entry.payloadHash) : null;
       setVerifyResult({
         found: true,
         entry,
-        recomputedHash: recomputed,
-        valid: true, // In production, compare with stored
+        valid,
+        reason: entry.payload ? 'Verified against stored audit payload.' : 'Hash payload unavailable; integrity status unknown.',
       });
     } else {
       setVerifyResult({ found: false });
@@ -177,20 +182,51 @@ export default function AuditPage() {
                 Verify Integrity
               </button>
               {verifyResult && (
-                <div style={{ marginTop: '16px', padding: '14px', borderRadius: 'var(--radius-md)', background: verifyResult.found ? 'rgba(16, 185, 129, 0.06)' : 'rgba(239, 68, 68, 0.06)', border: `1px solid ${verifyResult.found ? 'rgba(16, 185, 129, 0.2)' : 'rgba(239, 68, 68, 0.2)'}` }}>
+                <div style={{ marginTop: '16px', padding: '14px', borderRadius: 'var(--radius-md)', background: verifyResult.found && verifyResult.valid ? 'rgba(16, 185, 129, 0.06)' : verifyResult.found ? 'rgba(245, 158, 11, 0.06)' : 'rgba(239, 68, 68, 0.06)', border: `1px solid ${verifyResult.found && verifyResult.valid ? 'rgba(16, 185, 129, 0.2)' : verifyResult.found ? 'rgba(245, 158, 11, 0.2)' : 'rgba(239, 68, 68, 0.2)'}` }}>
                   {verifyResult.found ? (
-                    <div>
-                      <div style={{ fontWeight: 600, color: 'var(--success-glow)', marginBottom: '8px' }}>
-                        ✓ Record found and verified
+                    verifyResult.valid === true ? (
+                      <div>
+                        <div style={{ fontWeight: 600, color: 'var(--success-glow)', marginBottom: '8px' }}>
+                          ✓ Record found and verified
+                        </div>
+                        <div style={{ fontSize: '12px', color: 'var(--text-muted)' }}>
+                          Action: {verifyResult.entry.actionType}<br/>
+                          Entity: {verifyResult.entry.entityId}
+                        </div>
+                        <div className="hash-display" style={{ marginTop: '8px', fontSize: '10px' }}>
+                          Stored: {verifyResult.entry.payloadHash}
+                        </div>
+                        {verifyResult.reason && <div style={{ fontSize: '11px', color: 'var(--text-muted)', marginTop: '8px' }}>{verifyResult.reason}</div>}
                       </div>
-                      <div style={{ fontSize: '12px', color: 'var(--text-muted)' }}>
-                        Action: {verifyResult.entry.actionType}<br/>
-                        Entity: {verifyResult.entry.entityId}
+                    ) : verifyResult.valid === null ? (
+                      <div>
+                        <div style={{ fontWeight: 600, color: 'var(--warning-glow)', marginBottom: '8px' }}>
+                          ⚠️ Record found but payload is missing
+                        </div>
+                        <div style={{ fontSize: '12px', color: 'var(--text-muted)' }}>
+                          Action: {verifyResult.entry.actionType}<br/>
+                          Entity: {verifyResult.entry.entityId}
+                        </div>
+                        <div className="hash-display" style={{ marginTop: '8px', fontSize: '10px' }}>
+                          Stored: {verifyResult.entry.payloadHash}
+                        </div>
+                        {verifyResult.reason && <div style={{ fontSize: '11px', color: 'var(--text-muted)', marginTop: '8px' }}>{verifyResult.reason}</div>}
                       </div>
-                      <div className="hash-display" style={{ marginTop: '8px', fontSize: '10px' }}>
-                        Stored: {verifyResult.entry.payloadHash}
+                    ) : (
+                      <div>
+                        <div style={{ fontWeight: 600, color: 'var(--warning-glow)', marginBottom: '8px' }}>
+                          ⚠️ Record found but hash verification failed
+                        </div>
+                        <div style={{ fontSize: '12px', color: 'var(--text-muted)' }}>
+                          Action: {verifyResult.entry.actionType}<br/>
+                          Entity: {verifyResult.entry.entityId}
+                        </div>
+                        <div className="hash-display" style={{ marginTop: '8px', fontSize: '10px' }}>
+                          Stored: {verifyResult.entry.payloadHash}
+                        </div>
+                        {verifyResult.reason && <div style={{ fontSize: '11px', color: 'var(--text-muted)', marginTop: '8px' }}>{verifyResult.reason}</div>}
                       </div>
-                    </div>
+                    )
                   ) : (
                     <div style={{ color: 'var(--danger-glow)' }}>✗ No matching record found</div>
                   )}
