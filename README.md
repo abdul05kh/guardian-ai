@@ -13,6 +13,10 @@
   <strong>Built for the Google Solution Challenge 2026. Designed specifically to solve UN SDG 16 (Peace, Justice, and Strong Institutions) & UN SDG 9 (Industry, Innovation, and Infrastructure) via autonomous AI logic.</strong>
 </p>
 
+<h2 align="center">
+  🚀 Live Demo: <a href="https://guardain-ai.web.app/">https://guardain-ai.web.app/</a>
+</h2>
+
 <p align="center">
   <a href="#-features">Features</a> •
   <a href="#-screenshots">Screenshots</a> •
@@ -252,7 +256,7 @@ guardian-ai/
 Real-time command center with 6 KPI cards, auto-updating event feed (new events every 4-7 seconds), global infringement map with pulsing violation markers, platform-level violation distribution, and crisis response SLA tracking.
 
 ### AssetSentinel™ (`/assets`)
-Digital asset protection hub. Upload media files (video, audio, image, document) with automatic SHA-256 fingerprinting. Trigger cross-platform scans across 7 platforms. Run AI analysis via Gemini for content classification, protection priority, and uniqueness scoring.
+Digital asset protection hub. Upload media files (video, audio, image, document) with automatic SHA-256 fingerprinting. Features resilient Cloud Storage uploading with offline fallbacks and strict TrustLedger event logging. Trigger cross-platform scans across 7 platforms. Run AI analysis via Gemini for content classification, protection priority, and uniqueness scoring.
 
 ### CrisisCommand™ (`/crisis`)
 AI-powered predictive and reactive emergency response. Receives auto-dispatched alerts from the **Predictive Cyber-Kinetic Engine** explicitly detailing hybrid digital-physical targeting. Gemini AI generates automated sweep-and-clear protocols. Real-time responder board tracks personnel status and zone assignments.
@@ -267,7 +271,7 @@ Infringement tracking table explicitly bridged into live real-world targets. Fla
 Deep Research Intelligence module utilizing an autonomous multi-agent swarm to construct ForceGraph projections of piracy clusters. **Includes Spatial Bridging:** Digital Threat nodes gravitate visually toward Physical Venue nodes in the graphing view, highlighting exactly where the cyber-attack is pointing in the real world. 
 
 ### Predictive Forecast (`/forecast`)
-Geospatial Threat Mapping dashboard visualizing pre-crime vulnerability indexes and predicting incoming digital asset infringement vectors prior to exploitation utilizing SVG map rendering.
+Geospatial Threat Mapping dashboard visualizing pre-crime vulnerability indexes and predicting incoming digital asset infringement vectors prior to exploitation utilizing SVG map rendering. Features **Gemini AI-powered Executive Threat Forecast Reports** that synthesize spatial intelligence into immediate strategic recommendations.
 
 ### Enforcement Policies (`/policies`)
 Enterprise rule-set configuration allowing admins to set minimum confidence and revenue loss thresholds that automatically circumvent human evaluation queues and trigger real-time zero-touch autonomous DMCA notifications.

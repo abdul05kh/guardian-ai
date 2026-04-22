@@ -160,7 +160,9 @@ export default function ThreatNetworkPage() {
           status: 'Active',
           detectedAt: new Date().toISOString(),
           scanMethod: 'Deep Research Multi-Agent',
-          mitigation: aiResult.intelligence?.mitigationStrategy || "Awaiting strategy"
+          mitigation: aiResult.intelligence?.mitigationStrategy || "Awaiting strategy",
+          orgId: userProfile?.orgId || null,
+          userId: user.uid
         });
       }
     } catch (error) {

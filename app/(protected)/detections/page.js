@@ -49,7 +49,8 @@ export default function DetectionsPage() {
       detection.assetName,
       detection.url,
       detection.platform,
-      'Guardian AI Protected Organization'
+      'Guardian AI Protected Organization',
+      userProfile?.geminiApiKey
     );
     setDmcaNotice({ detection, text: notice });
     setGeneratingDMCA(null);
@@ -68,7 +69,7 @@ export default function DetectionsPage() {
     addToast('Scanning target URL using WebScanner...', 'info');
     
     try {
-      const response = await scanExternalUrl(scanUrl);
+      const response = await scanExternalUrl(scanUrl, userProfile?.geminiApiKey);
       const cleanResponse = typeof response === 'string' ? response.replace(/```json/gi, '').replace(/```/g, '').trim() : response;
       const res = typeof cleanResponse === 'string' ? JSON.parse(cleanResponse) : cleanResponse;
       
@@ -90,7 +91,7 @@ export default function DetectionsPage() {
               addToast(`⚡ Zero-Touch Policy invoked: Auto-dispatching DMCA to ${res.platform}`, 'warning');
               
               // 1. Generate Notice Autonomously
-              const autoNoticeText = await generateDMCANotice(res.assetName || 'Target Asset', scanUrl, res.platform, userProfile?.orgId || 'Guardian AI Org');
+              const autoNoticeText = await generateDMCANotice(res.assetName || 'Target Asset', scanUrl, res.platform, userProfile?.orgId || 'Guardian AI Org', userProfile?.geminiApiKey);
               
               // 2. Log Detection as Automatically Mitigated
               const detectionRef = await addDoc(collection(db, 'infringement_detections'), {
@@ -104,7 +105,8 @@ export default function DetectionsPage() {
                 detectedAt: new Date().toISOString(),
                 dmcaSentAt: new Date().toISOString(),
                 autoEnforcedRuleId: p.id,
-                orgId: userProfile?.orgId || null
+                orgId: userProfile?.orgId || null,
+                userId: user.uid
               });
 
               // 3. Drop to TrustLedger Cryptographically
@@ -143,7 +145,8 @@ export default function DetectionsPage() {
             status: 'pending_review',
             correlatedVenue: res.correlatedVenue || null,
             detectedAt: new Date().toISOString(),
-            orgId: userProfile?.orgId || null
+            orgId: userProfile?.orgId || null,
+            userId: user.uid
           });
           
           if (res.kineticThreat) {
@@ -252,7 +255,7 @@ export default function DetectionsPage() {
                   <td><span className={`badge ${statusStyles[d.status]?.badge}`}>{statusStyles[d.status]?.label}</span></td>
                   <td>
                     <div style={{ display: 'flex', gap: '6px' }}>
-                      {d.status !== 'false_positive' && (
+                      {d.status !== 'false_positive' && d.status !== 'pending_review' && (
                         <button
                           className="btn btn-sm btn-danger"
                           onClick={() => handleGenerateDMCA(d)}
@@ -261,7 +264,38 @@ export default function DetectionsPage() {
                           {generatingDMCA === d.id ? '...' : '⚖️ DMCA'}
                         </button>
                       )}
-                      <button className="btn btn-sm btn-ghost">Review</button>
+                      
+                      {d.status === 'pending_review' && (
+                        <>
+                          <button 
+                            className="btn btn-sm btn-ghost" 
+                            style={{ color: 'var(--success)' }}
+                            onClick={async () => {
+                              try {
+                                await updateDoc(doc(db, 'infringement_detections', d.id), { status: 'confirmed' });
+                                addToast('Marked as Confirmed', 'success');
+                              } catch(e) {
+                                addToast('Failed to update status', 'error');
+                              }
+                            }}
+                          >
+                            ✓ Confirm
+                          </button>
+                          <button 
+                            className="btn btn-sm btn-ghost"
+                            onClick={async () => {
+                              try {
+                                await updateDoc(doc(db, 'infringement_detections', d.id), { status: 'false_positive' });
+                                addToast('Marked as False Positive', 'info');
+                              } catch(e) {
+                                addToast('Failed to update status', 'error');
+                              }
+                            }}
+                          >
+                            ✕ Dismiss
+                          </button>
+                        </>
+                      )}
                     </div>
                   </td>
                 </tr>

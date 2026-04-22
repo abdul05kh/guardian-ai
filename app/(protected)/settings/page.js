@@ -124,7 +124,7 @@ export default function SettingsPage() {
               { name: 'Firebase Auth', status: 'Connected', color: 'success' },
               { name: 'Firestore', status: 'Connected', color: 'success' },
               { name: 'Cloud Storage', status: 'Connected', color: 'success' },
-              { name: 'Gemini API', status: 'Not configured', color: 'warning' },
+              { name: 'Gemini API', status: userProfile?.geminiApiKey ? 'Connected' : 'Not configured', color: userProfile?.geminiApiKey ? 'success' : 'warning' },
               { name: 'Cloud Messaging', status: 'Connected', color: 'success' },
               { name: 'BigQuery', status: 'Not configured', color: 'warning' },
             ].map(svc => (

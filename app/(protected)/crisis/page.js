@@ -7,6 +7,7 @@ import { db } from '@/lib/firebase';
 import { useToast } from '@/lib/toast-context';
 import { useAuth } from '@/lib/auth-context';
 import DOMPurify from 'dompurify';
+import { createAuditEntry } from '@/lib/crypto';
 
 const SAMPLE_VENUES_FALLBACK = [
   { id: 1, name: 'Grand Hyatt Mumbai', type: 'hotel', capacity: 800, zones: ['Lobby', 'Pool', 'Restaurant', 'Ballroom', 'Parking'] },
@@ -75,10 +76,20 @@ export default function CrisisPage() {
               evt.crisisData.crisisType || 'security',
               evt.crisisData.severity || 'high',
               selectedVenue?.capacity || 800,
-              MOCK_RESPONDERS.length
+              MOCK_RESPONDERS.length,
+              userProfile?.geminiApiKey
             );
             
-            let plan = typeof planResult === 'string' ? JSON.parse(planResult) : planResult;
+            let plan;
+            try {
+              plan = typeof planResult === 'string' ? JSON.parse(planResult) : planResult;
+              if (!plan.actions || !Array.isArray(plan.actions) || plan.actions.length === 0) {
+                throw new Error('Empty action plan from AI');
+              }
+            } catch {
+              plan = { actions: [{ priority: 1, task: 'Secure the area', assignTo: 'Security', timeframe: '0-60s', critical: true }], evacuationRequired: false };
+            }
+            
             setActionPlan(plan);
           } catch(e) {
             setActionPlan({ actions: [{ priority: 1, task: 'Investigate Hybrid Kinetic Threat', assignTo: 'Security', timeframe: '0-60s', critical: true }], evacuationRequired: false });
@@ -150,7 +161,7 @@ export default function CrisisPage() {
 
     // Step 1: AI Classification
     try {
-      const result = await classifyCrisis(finalDesc, selectedVenue?.type || 'venue', 'Zone A');
+      const result = await classifyCrisis(finalDesc, selectedVenue?.type || 'venue', 'Zone A', userProfile?.geminiApiKey);
       let parsed;
       try {
         parsed = typeof result === 'string' ? JSON.parse(result) : result;
@@ -191,12 +202,16 @@ export default function CrisisPage() {
         parsed.crisisType || 'security',
         parsed.severity || 'high',
         selectedVenue?.capacity || 0,
-        responders.length
+        responders.length,
+        userProfile?.geminiApiKey
       );
       
       let plan;
       try {
         plan = typeof planResult === 'string' ? JSON.parse(planResult) : planResult;
+        if (!plan.actions || !Array.isArray(plan.actions) || plan.actions.length === 0) {
+          throw new Error('Empty action plan from AI');
+        }
       } catch {
         plan = { actions: [{ priority: 1, task: 'Secure the area', assignTo: 'Security', timeframe: '0-60s', critical: true }], evacuationRequired: false };
       }
@@ -225,8 +240,25 @@ export default function CrisisPage() {
     }]);
 
     if (activeCrisisId) {
-      const { doc, updateDoc } = await import('firebase/firestore');
+      const { doc, updateDoc, addDoc, collection } = await import('firebase/firestore');
       await updateDoc(doc(db, 'active_crisis_events', activeCrisisId), { status: 'resolved' });
+      
+      try {
+        const auditLog = await createAuditEntry({
+          userId: user.uid,
+          orgId: userProfile?.orgId || null,
+          actionType: 'CRISIS_RESOLVED',
+          entityType: 'crisis_event',
+          entityId: activeCrisisId,
+          payload: `CRISIS_RESOLVED_${activeCrisisId}_${new Date().toISOString()}`
+        });
+        await addDoc(collection(db, 'audit_log'), {
+          ...auditLog,
+          user: userProfile?.email || user?.email || 'unknown'
+        });
+      } catch (err) {
+        console.error('Failed to write to TrustLedger', err);
+      }
     }
 
     setTimeout(() => {
@@ -477,6 +509,40 @@ export default function CrisisPage() {
               </div>
             </div>
           </div>
+
+          {/* AI Action Plan */}
+          {actionPlan && (
+            <div className="card">
+              <div className="card-header">
+                <h3 className="card-title">🤖 AI Response Plan</h3>
+                <span className="badge badge-purple">Gemini Generated</span>
+              </div>
+              <div className="card-body">
+                {actionPlan.actions?.map((action, i) => (
+                  <div key={i} className="action-item">
+                    <div className="action-priority" style={{
+                      background: action.critical ? 'rgba(239, 68, 68, 0.15)' : 'rgba(59, 130, 246, 0.15)',
+                      color: action.critical ? 'var(--danger-glow)' : 'var(--blue-glow)',
+                    }}>
+                      {action.priority}
+                    </div>
+                    <div style={{ flex: 1 }}>
+                      <div style={{ fontSize: '13px', fontWeight: 600 }}>{action.task}</div>
+                      <div style={{ fontSize: '11px', color: 'var(--text-muted)', marginTop: '2px' }}>
+                        Assign: {action.assignTo} • Timeframe: {action.timeframe}
+                      </div>
+                    </div>
+                    {action.critical && <span className="badge badge-danger">Critical</span>}
+                  </div>
+                ))}
+                {actionPlan.evacuationRequired && (
+                  <div style={{ marginTop: '12px', padding: '12px', background: 'rgba(239, 68, 68, 0.08)', borderRadius: 'var(--radius-md)', border: '1px solid rgba(239, 68, 68, 0.2)' }}>
+                    <strong style={{ color: 'var(--danger-glow)' }}>⚠️ EVACUATION REQUIRED</strong>
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
         </div>
 
         {/* Right Column — Responders + Timeline + Actions */}
@@ -527,40 +593,6 @@ export default function CrisisPage() {
                     </div>
                   ))}
                 </div>
-              </div>
-            </div>
-          )}
-
-          {/* AI Action Plan */}
-          {actionPlan && (
-            <div className="card">
-              <div className="card-header">
-                <h3 className="card-title">🤖 AI Response Plan</h3>
-                <span className="badge badge-purple">Gemini Generated</span>
-              </div>
-              <div className="card-body">
-                {actionPlan.actions?.map((action, i) => (
-                  <div key={i} className="action-item">
-                    <div className="action-priority" style={{
-                      background: action.critical ? 'rgba(239, 68, 68, 0.15)' : 'rgba(59, 130, 246, 0.15)',
-                      color: action.critical ? 'var(--danger-glow)' : 'var(--blue-glow)',
-                    }}>
-                      {action.priority}
-                    </div>
-                    <div style={{ flex: 1 }}>
-                      <div style={{ fontSize: '13px', fontWeight: 600 }}>{action.task}</div>
-                      <div style={{ fontSize: '11px', color: 'var(--text-muted)', marginTop: '2px' }}>
-                        Assign: {action.assignTo} • Timeframe: {action.timeframe}
-                      </div>
-                    </div>
-                    {action.critical && <span className="badge badge-danger">Critical</span>}
-                  </div>
-                ))}
-                {actionPlan.evacuationRequired && (
-                  <div style={{ marginTop: '12px', padding: '12px', background: 'rgba(239, 68, 68, 0.08)', borderRadius: 'var(--radius-md)', border: '1px solid rgba(239, 68, 68, 0.2)' }}>
-                    <strong style={{ color: 'var(--danger-glow)' }}>⚠️ EVACUATION REQUIRED</strong>
-                  </div>
-                )}
               </div>
             </div>
           )}

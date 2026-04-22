@@ -5,8 +5,8 @@ import { useAuth } from '@/lib/auth-context';
 import { db, storage } from '@/lib/firebase';
 import { collection, addDoc, serverTimestamp, query, orderBy, limit, getDocs, where, onSnapshot } from 'firebase/firestore';
 import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
-import { generateHash } from '@/lib/crypto';
-import { analyzeMediaContent } from '@/lib/gemini';
+import { generateHash, createAuditEntry } from '@/lib/crypto';
+import { analyzeMediaContent, generateDMCANotice } from '@/lib/gemini';
 
 const SAMPLE_ASSETS = [
   { id: 1, name: 'IPL 2026 Final Broadcast', type: 'video', status: 'active', violations: 34, hash: 'a7f3d2...e819b4', confidence: 94 },
@@ -84,19 +84,26 @@ export default function AssetsPage() {
       // Generate hash from file name + content type
       const hash = await generateHash(file.name + file.type + file.size + Date.now());
 
-      // Try uploading to Firebase Storage
+      // Try uploading to Firebase Storage with a 3-second timeout
       let downloadURL = '';
       try {
         const storageRef = ref(storage, `assets/${user.uid}/${Date.now()}_${file.name}`);
-        await uploadBytes(storageRef, file);
-        downloadURL = await getDownloadURL(storageRef);
+        await Promise.race([
+          uploadBytes(storageRef, file),
+          new Promise((_, reject) => setTimeout(() => reject(new Error('Storage upload timeout')), 3000))
+        ]);
+        downloadURL = await Promise.race([
+          getDownloadURL(storageRef),
+          new Promise((_, reject) => setTimeout(() => reject(new Error('URL fetch timeout')), 2000))
+        ]);
       } catch (err) {
-        console.log('Storage upload skipped:', err.message);
+        console.warn('Storage upload skipped/timed out:', err.message);
       }
 
       // Save to Firestore
+      let newDocId = null;
       try {
-        await addDoc(collection(db, 'digital_assets'), {
+        const docRef = await addDoc(collection(db, 'digital_assets'), {
           assetName: file.name,
           assetType: file.type.split('/')[0] || 'document',
           gcsUri: downloadURL,
@@ -108,8 +115,23 @@ export default function AssetsPage() {
           createdAt: serverTimestamp(),
           violations: 0,
         });
+        newDocId = docRef.id;
+
+        // Register in TrustLedger
+        const auditLog = await createAuditEntry({
+          userId: user.uid,
+          orgId: userProfile?.orgId || null,
+          actionType: 'ASSET_REGISTERED',
+          entityType: 'digital_asset',
+          entityId: newDocId,
+          payload: `ASSET_REGISTERED_${hash.substring(0, 16)}`,
+        });
+        await addDoc(collection(db, 'audit_log'), {
+           ...auditLog,
+           user: userProfile?.email || 'unknown',
+        });
       } catch (err) {
-        console.log('Firestore save skipped:', err.message);
+        console.warn('Firestore/Ledger save skipped:', err.message);
       }
 
       // Add to local state
@@ -422,10 +444,52 @@ export default function AssetsPage() {
                       <span className="score">{result.confidence}%</span>
                     </div>
                     <button className="btn btn-sm btn-danger" onClick={() => {
-                      alert('DMCA Notice dispatched for ' + result.url);
-                      const newResults = scanResults.filter(r => r !== result);
-                      setScanResults(newResults);
-                      if (newResults.length === 0) setScanning(false);
+                      const dispatchDMCA = async () => {
+                        try {
+                          const notice = await generateDMCANotice(
+                            selectedAsset?.name || 'Unknown Asset',
+                            result.url,
+                            result.platform,
+                            userProfile?.orgId || 'Guardian AI Organization'
+                          );
+                          const detRef = await addDoc(collection(db, 'infringement_detections'), {
+                            assetName: selectedAsset?.name || 'Unknown Asset',
+                            url: result.url,
+                            platform: result.platform,
+                            method: 'AssetSentinel Scan',
+                            confidence: parseFloat(result.confidence) || 85,
+                            revenueAtRisk: 0,
+                            status: 'dmca_sent',
+                            detectedAt: new Date().toISOString(),
+                            dmcaSentAt: new Date().toISOString(),
+                            dmcaNoticeText: notice,
+                            orgId: userProfile?.orgId || null,
+                            userId: user.uid
+                          });
+                          
+                          const auditLog = await createAuditEntry({
+                            userId: user.uid,
+                            orgId: userProfile?.orgId || null,
+                            actionType: 'DMCA_DISPATCHED',
+                            entityType: 'dmca_notice',
+                            entityId: detRef.id,
+                            payload: `DMCA_DISPATCHED_${detRef.id}_${new Date().toISOString()}`,
+                          });
+                          await addDoc(collection(db, 'audit_log'), {
+                            ...auditLog,
+                            user: userProfile?.email || user?.email || 'unknown'
+                          });
+                          
+                          alert('DMCA Notice dispatched for ' + result.url);
+                          const newResults = scanResults.filter(r => r !== result);
+                          setScanResults(newResults);
+                          if (newResults.length === 0) setScanning(false);
+                        } catch (err) {
+                          console.error(err);
+                          alert('Failed to dispatch DMCA');
+                        }
+                      };
+                      dispatchDMCA();
                     }}>DMCA</button>
                   </div>
                 ))}
