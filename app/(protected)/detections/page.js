@@ -69,7 +69,8 @@ export default function DetectionsPage() {
     
     try {
       const response = await scanExternalUrl(scanUrl);
-      const res = typeof response === 'string' ? JSON.parse(response) : response;
+      const cleanResponse = typeof response === 'string' ? response.replace(/```json/gi, '').replace(/```/g, '').trim() : response;
+      const res = typeof cleanResponse === 'string' ? JSON.parse(cleanResponse) : cleanResponse;
       
       if (res.infringementFound) {
         // [ENTERPRISE MODULE]: Zero-Touch Enforcement Policy Evaluation

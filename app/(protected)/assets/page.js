@@ -421,7 +421,12 @@ export default function AssetsPage() {
                       </div>
                       <span className="score">{result.confidence}%</span>
                     </div>
-                    <button className="btn btn-sm btn-danger">DMCA</button>
+                    <button className="btn btn-sm btn-danger" onClick={() => {
+                      alert('DMCA Notice dispatched for ' + result.url);
+                      const newResults = scanResults.filter(r => r !== result);
+                      setScanResults(newResults);
+                      if (newResults.length === 0) setScanning(false);
+                    }}>DMCA</button>
                   </div>
                 ))}
               </div>

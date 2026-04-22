@@ -8,6 +8,14 @@ import { useAuth } from '@/lib/auth-context';
 
 // const geoUrl = "https://cdn.jsdelivr.net/npm/world-atlas@2/countries-110m.json";
 
+import dynamic from 'next/dynamic';
+
+const MapContainer = dynamic(() => import('react-leaflet').then(m => m.MapContainer), { ssr: false });
+const TileLayer = dynamic(() => import('react-leaflet').then(m => m.TileLayer), { ssr: false });
+const CircleMarker = dynamic(() => import('react-leaflet').then(m => m.CircleMarker), { ssr: false });
+const Popup = dynamic(() => import('react-leaflet').then(m => m.Popup), { ssr: false });
+import 'leaflet/dist/leaflet.css';
+
 export default function ThreatForecastPage() {
   const { user, userProfile } = useAuth();
   const [markers, setMarkers] = useState([]);
@@ -15,8 +23,6 @@ export default function ThreatForecastPage() {
 
   useEffect(() => {
     if (!user) return;
-    // Generate predictive markers based on historical detection clusters
-    // For enterprise pitch, we simulate coordinate plotting based on the platforms detected
     const loadPredictiveVectors = async () => {
       try {
         const baseCollection = collection(db, 'infringement_detections');
@@ -28,27 +34,20 @@ export default function ThreatForecastPage() {
         const generatedMarkers = [];
         snapshot.docs.forEach((doc, i) => {
           const data = doc.data();
-          // Extremely rudimentary geo-mapping based on threat actor hashing
           const pseudoLat = (data.confidence * i % 180) - 90;
           const pseudoLng = (data.revenueAtRisk * i % 360) - 180;
           
           if (data.status === 'Active' || data.status === 'pending_review') {
             generatedMarkers.push({
-              markerOffset: -15,   
               name: `${data.platform} Vector`,
-              coordinates: [pseudoLng, pseudoLat],
+              coordinates: [pseudoLat, pseudoLng],
               severity: data.confidence > 90 ? 'critical' : 'warning'
             });
           }
         });
         
-        // Add some simulated future anomalies for the "Forecast" aesthetic
-        generatedMarkers.push({
-          markerOffset: -15, name: "Projected Tor Node Surge", coordinates: [15, 45], severity: 'forecast'
-        });
-        generatedMarkers.push({
-          markerOffset: -15, name: "Anomalous Discord Activity", coordinates: [-100, 35], severity: 'forecast'
-        });
+        generatedMarkers.push({ name: "Projected Tor Node Surge", coordinates: [45, 15], severity: 'forecast' });
+        generatedMarkers.push({ name: "Anomalous Discord Activity", coordinates: [35, -100], severity: 'forecast' });
 
         setMarkers(generatedMarkers);
       } catch (e) {
@@ -73,7 +72,6 @@ export default function ThreatForecastPage() {
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-4 gap-6">
-        
         <div className="lg:col-span-3 card p-0 bg-[#0B1120] border-slate-800 overflow-hidden relative" style={{ height: '600px' }}>
           {loading && (
             <div className="absolute inset-0 z-10 flex flex-col items-center justify-center bg-[#0B1120]/80 backdrop-blur-sm">
@@ -82,15 +80,37 @@ export default function ThreatForecastPage() {
             </div>
           )}
           
-          <div className="flex items-center justify-center h-full text-slate-400">
-            <div className="text-center">
-              <div className="w-16 h-16 mx-auto mb-4 opacity-50">🌍</div>
-              <p>Geospatial Threat Map</p>
-              <p className="text-sm">Map visualization temporarily disabled</p>
+          {!loading && (
+            <div style={{ width: '100%', height: '100%' }}>
+              <MapContainer center={[20, 0]} zoom={2} style={{ width: '100%', height: '100%', background: '#0B1120' }}>
+                <TileLayer
+                  url="https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png"
+                  attribution='&copy; <a href="https://carto.com/">CARTO</a>'
+                />
+                {markers.map((marker, idx) => (
+                  <CircleMarker
+                    key={idx}
+                    center={marker.coordinates}
+                    radius={marker.severity === 'critical' ? 8 : marker.severity === 'warning' ? 6 : 5}
+                    pathOptions={{
+                      color: marker.severity === 'critical' ? '#EF4444' : marker.severity === 'warning' ? '#F59E0B' : '#A855F7',
+                      fillColor: marker.severity === 'critical' ? '#EF4444' : marker.severity === 'warning' ? '#F59E0B' : '#A855F7',
+                      fillOpacity: 0.7,
+                    }}
+                  >
+                    <Popup>
+                      <div style={{ background: 'var(--bg-card)', color: 'var(--text-primary)', padding: '4px' }}>
+                        <strong>{marker.name}</strong><br/>
+                        Severity: {marker.severity}
+                      </div>
+                    </Popup>
+                  </CircleMarker>
+                ))}
+              </MapContainer>
             </div>
-          </div>
+          )}
           
-          <div className="absolute bottom-4 left-4 bg-slate-900/80 p-3 rounded border border-slate-800 text-xs text-slate-400 font-mono">
+          <div className="absolute bottom-4 left-4 bg-slate-900/80 p-3 rounded border border-slate-800 text-xs text-slate-400 font-mono z-[1000]">
              <div className="flex items-center gap-2 mb-1"><span className="w-2 h-2 rounded-full bg-red-500"></span> Active Critical Nodes</div>
              <div className="flex items-center gap-2 mb-1"><span className="w-2 h-2 rounded-full bg-amber-500"></span> Investigating Vectors</div>
              <div className="flex items-center gap-2"><span className="w-2 h-2 rounded-full bg-purple-500 animate-pulse"></span> Forecasted Anomalies</div>

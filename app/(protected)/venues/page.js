@@ -62,7 +62,10 @@ export default function VenuesPage() {
                 <div><div style={{ fontFamily: 'var(--font-heading)', fontSize: '18px', fontWeight: 700 }}>{v.capacity.toLocaleString()}</div><div style={{ fontSize: '11px', color: 'var(--text-muted)' }}>Capacity</div></div>
                 <div><div style={{ fontFamily: 'var(--font-heading)', fontSize: '18px', fontWeight: 700 }}>{v.zones}</div><div style={{ fontSize: '11px', color: 'var(--text-muted)' }}>Zones</div></div>
               </div>
-              <div style={{ marginTop: '16px' }}><span className="badge badge-success">{v.status}</span></div>
+              <div style={{ marginTop: '16px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                <span className="badge badge-success">{v.status}</span>
+                <a href="/crisis" className="btn btn-sm btn-ghost" style={{ border: '1px solid var(--border-medium)' }}>🚨 Crisis Command</a>
+              </div>
             </div>
           </div>
         ))}
