@@ -185,7 +185,10 @@ export default function AssetsPage() {
     setSelectedAsset(asset);
     setAiAnalysis('loading');
     try {
-      const result = await analyzeMediaContent(`${asset.type} content named "${asset.name}" with ${asset.violations} known violations`);
+      const result = await analyzeMediaContent(
+        `${asset.type} content named "${asset.name}" with ${asset.violations} known violations`,
+        userProfile?.geminiApiKey
+      );
       setAiAnalysis(typeof result === 'string' ? JSON.parse(result) : result);
     } catch (e) {
       setAiAnalysis({ error: 'AI analysis failed. Configure Gemini API key for live analysis.' });
@@ -450,7 +453,8 @@ export default function AssetsPage() {
                             selectedAsset?.name || 'Unknown Asset',
                             result.url,
                             result.platform,
-                            userProfile?.orgId || 'Guardian AI Organization'
+                            userProfile?.orgId || 'Guardian AI Organization',
+                            userProfile?.geminiApiKey
                           );
                           const detRef = await addDoc(collection(db, 'infringement_detections'), {
                             assetName: selectedAsset?.name || 'Unknown Asset',

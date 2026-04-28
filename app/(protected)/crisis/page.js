@@ -239,26 +239,27 @@ export default function CrisisPage() {
       type: 'success',
     }]);
 
+    const { doc, updateDoc, addDoc, collection } = await import('firebase/firestore');
     if (activeCrisisId) {
-      const { doc, updateDoc, addDoc, collection } = await import('firebase/firestore');
       await updateDoc(doc(db, 'active_crisis_events', activeCrisisId), { status: 'resolved' });
-      
-      try {
-        const auditLog = await createAuditEntry({
-          userId: user.uid,
-          orgId: userProfile?.orgId || null,
-          actionType: 'CRISIS_RESOLVED',
-          entityType: 'crisis_event',
-          entityId: activeCrisisId,
-          payload: `CRISIS_RESOLVED_${activeCrisisId}_${new Date().toISOString()}`
-        });
-        await addDoc(collection(db, 'audit_log'), {
-          ...auditLog,
-          user: userProfile?.email || user?.email || 'unknown'
-        });
-      } catch (err) {
-        console.error('Failed to write to TrustLedger', err);
-      }
+    }
+    
+    try {
+      const eventId = activeCrisisId || `manual_${Date.now()}`;
+      const auditLog = await createAuditEntry({
+        userId: user.uid,
+        orgId: userProfile?.orgId || null,
+        actionType: 'CRISIS_RESOLVED',
+        entityType: 'crisis_event',
+        entityId: eventId,
+        payload: `CRISIS_RESOLVED_${eventId}_${new Date().toISOString()}`
+      });
+      await addDoc(collection(db, 'audit_log'), {
+        ...auditLog,
+        user: userProfile?.email || user?.email || 'unknown'
+      });
+    } catch (err) {
+      console.error('Failed to write to TrustLedger', err);
     }
 
     setTimeout(() => {
